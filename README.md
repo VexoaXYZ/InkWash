@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![InkWash Banner](https://via.placeholder.com/800x200/1a1a1a/ffffff?text=InkWash)
+![InkWash Banner](https://i.vgy.me/KcRrgP.png)
 
 **The modern FiveM server management CLI**
 
