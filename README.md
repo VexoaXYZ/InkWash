@@ -92,7 +92,7 @@ InkWash transforms FiveM server management from a complex, time-consuming proces
 <summary><strong>Windows</strong> (PowerShell)</summary>
 
 ```powershell
-irm https://raw.githubusercontent.com/VexoaXYZ/InkWash/master/install.ps1 | iex
+irm https://raw.githubusercontent.com/VexoaXYZ/InkWash/main/install.ps1 | iex
 ```
 
 *Requires PowerShell 5.1+ and internet connection*
@@ -103,7 +103,7 @@ irm https://raw.githubusercontent.com/VexoaXYZ/InkWash/master/install.ps1 | iex
 <summary><strong>macOS / Linux</strong> (Bash)</summary>
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/VexoaXYZ/InkWash/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/VexoaXYZ/InkWash/main/install.sh | bash
 ```
 
 *Requires curl and bash*
