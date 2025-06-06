@@ -416,7 +416,7 @@ Built with love for the FiveM community. Special thanks to:
 
 <div align="center">
 
-**Made with ❤️ by the InkWash Team**
+**Made with ❤️ by the Inkwell Team**
 
 [⬆ Back to Top](#inkwash)
 
