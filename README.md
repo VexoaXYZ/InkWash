@@ -91,8 +91,18 @@ InkWash transforms FiveM server management from a complex, time-consuming proces
 <details>
 <summary><strong>Windows</strong> (PowerShell)</summary>
 
+**Option 1: Direct Download Script**
 ```powershell
-irm https://raw.githubusercontent.com/VexoaXYZ/InkWash/main/install.ps1 | iex
+# Download and run installer
+Invoke-WebRequest -Uri "https://github.com/VexoaXYZ/InkWash/raw/main/install.ps1" -OutFile "install.ps1"
+.\install.ps1
+Remove-Item install.ps1
+```
+
+**Option 2: Manual Download**
+```powershell
+# Download binary directly
+Invoke-WebRequest -Uri "https://github.com/VexoaXYZ/InkWash/releases/latest/download/inkwash-windows-amd64.exe" -OutFile "$env:USERPROFILE\.local\bin\inkwash.exe"
 ```
 
 *Requires PowerShell 5.1+ and internet connection*
@@ -102,8 +112,28 @@ irm https://raw.githubusercontent.com/VexoaXYZ/InkWash/main/install.ps1 | iex
 <details>
 <summary><strong>macOS / Linux</strong> (Bash)</summary>
 
+**Option 1: Download Script**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/VexoaXYZ/InkWash/main/install.sh | bash
+# Download and run installer
+curl -LO https://github.com/VexoaXYZ/InkWash/raw/main/install.sh
+chmod +x install.sh
+./install.sh
+rm install.sh
+```
+
+**Option 2: Direct Binary Download**
+```bash
+# Linux x64
+curl -L https://github.com/VexoaXYZ/InkWash/releases/latest/download/inkwash-linux-amd64 -o ~/.local/bin/inkwash
+chmod +x ~/.local/bin/inkwash
+
+# macOS Intel
+curl -L https://github.com/VexoaXYZ/InkWash/releases/latest/download/inkwash-darwin-amd64 -o ~/.local/bin/inkwash
+chmod +x ~/.local/bin/inkwash
+
+# macOS Apple Silicon
+curl -L https://github.com/VexoaXYZ/InkWash/releases/latest/download/inkwash-darwin-arm64 -o ~/.local/bin/inkwash
+chmod +x ~/.local/bin/inkwash
 ```
 
 *Requires curl and bash*
