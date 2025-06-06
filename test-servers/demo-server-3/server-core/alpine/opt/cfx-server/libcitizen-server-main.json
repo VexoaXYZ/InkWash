@@ -1,0 +1,13 @@
+{
+	"name": "citizen:server:main",
+	"version": "0.1.0",
+	"dependencies": [
+		"fx[2]",
+		"citizen:server:instance",
+		"citizen:server:net",
+		"vendor:boost_program_options",
+		"vfs:core"
+	],
+	"provides": [],
+	"shouldAutoInstance": false
+}

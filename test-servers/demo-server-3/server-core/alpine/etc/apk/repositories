@@ -1,0 +1,12 @@
+http://dl-cdn.alpinelinux.org/alpine/v3.12/main
+http://dl-cdn.alpinelinux.org/alpine/v3.14/main
+http://dl-cdn.alpinelinux.org/alpine/v3.16/main
+http://dl-cdn.alpinelinux.org/alpine/v3.16/community
+http://dl-cdn.alpinelinux.org/alpine/edge/main
+http://dl-cdn.alpinelinux.org/alpine/edge/community
+http://dl-cdn.alpinelinux.org/alpine/edge/testing
+https://runtime.fivem.net/client/alpine/builds
+https://runtime.fivem.net/client/alpine/main
+https://runtime.fivem.net/client/alpine/testing
+https://runtime.fivem.net/client/alpine/community
+https://mirrors.fivem.net/build/linux/packages/cfx

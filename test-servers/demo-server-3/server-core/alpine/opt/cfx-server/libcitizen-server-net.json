@@ -1,0 +1,12 @@
+{
+	"name": "citizen:server:net",
+	"version": "0.1.0",
+	"dependencies": [
+		"fx[2]",
+		"citizen:server:instance",
+		"net:base",
+		"net:tcp-server",
+		"net:http-server"
+	],
+	"provides": []
+}

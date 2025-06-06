@@ -1,0 +1,12 @@
+{
+	"name": "net:http-server",
+	"version": "0.1.0",
+	"dependencies": [
+		"fx[2]",
+		"net:tcp-server",
+		"vendor:eastl",
+		"vendor:picohttpparser",
+		"vendor:nghttp2"
+	],
+	"provides": []
+}

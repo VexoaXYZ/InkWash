@@ -1,0 +1,11 @@
+{
+	"name": "svadhesive",
+	"version": "0.1.0",
+	"dependencies": [
+		"fx[2]",
+		"citizen:server:impl",
+		"citizen:scripting:lua54",
+		"vendor:openssl_ssl"
+	],
+	"provides": []
+}

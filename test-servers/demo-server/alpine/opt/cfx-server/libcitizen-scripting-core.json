@@ -1,0 +1,12 @@
+{
+	"name": "citizen:scripting:core",
+	"version": "0.1.0",
+	"dependencies": [
+		"fx[2]",
+		"citizen:resources:core",
+		"scripting",
+		"conhost",
+		"http-client"
+	],
+	"provides": []
+}
