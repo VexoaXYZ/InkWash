@@ -137,10 +137,10 @@ curl -fsSL https://raw.githubusercontent.com/VexoaXYZ/InkWash/master/install.sh 
 
 ```bash
 # Interactive server creation
-inkwash create server
+inkwash create
 
 # Advanced options
-inkwash create server --name "MyServer" --template "basic"
+inkwash create --name "MyServer" --template "basic"
 ```
 
 ### **Resource Management**
@@ -288,7 +288,7 @@ InkWash/
 Create new FiveM servers with interactive setup.
 
 ```bash
-inkwash create server [flags]
+inkwash create [flags]
 
 Flags:
   --name string      Server name
