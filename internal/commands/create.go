@@ -1,10 +1,11 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/vexoa/inkwash/internal/fivem"
+	"github.com/vexoa/inkwash/internal/services"
 )
 
 var (
@@ -18,19 +19,19 @@ var createCmd = &cobra.Command{
 	Short: "Create a new FiveM server",
 	Long:  `Create a new FiveM server with optimized configuration and cleaned setup.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		creator := fivem.NewServerCreator()
+		// Create service container
+		container := services.NewContainer()
 		
-		config := fivem.ServerConfig{
-			Name:     serverName,
-			Path:     serverPath,
-			Template: template,
-		}
-
-		if err := creator.Create(config); err != nil {
+		// Create context
+		ctx := context.Background()
+		
+		// Create server using the new service
+		server, err := container.ServerService.CreateServer(ctx, serverName, serverPath, template)
+		if err != nil {
 			return fmt.Errorf("failed to create server: %w", err)
 		}
 
-		fmt.Printf("✅ Successfully created FiveM server '%s' at %s\n", serverName, serverPath)
+		fmt.Printf("✅ Server created successfully with ID: %s\n", server.ID)
 		return nil
 	},
 }

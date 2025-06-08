@@ -96,3 +96,10 @@ func (d *Downloader) DownloadWithProgress(url, destPath string, onProgress func(
 
 	return nil
 }
+
+// DownloadFile is a simple wrapper for downloading files with a progress message
+func DownloadFile(url, destPath, message string) error {
+	fmt.Printf("%s...\n", message)
+	downloader := NewDownloader()
+	return downloader.DownloadFile(url, destPath)
+}
