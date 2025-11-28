@@ -13,11 +13,11 @@ Before you start, make sure you have:
 
 ## 🔑 Getting a License Key
 
-1. Go to **[https://keymaster.fivem.net/](https://keymaster.fivem.net/)**
-2. Log in with your FiveM account
-3. Click **"New Server"**
+1. Go to **[https://portal.cfx.re/servers/registration-keys](https://portal.cfx.re/servers/registration-keys)**
+2. Log in with your Cfx.re account
+3. Click **"Register Server"**
 4. Fill in the server details (you can use anything, it's just for registration)
-5. Click **"Generate"**
+5. Click **"Create"**
 6. Copy the key (it starts with `cfxk_`)
 
 **Save this key somewhere safe - you'll need it!**

@@ -1,212 +1,296 @@
-# 🎨 InkWash - Easy FiveM Server Manager
+# InkWash - FiveM Server Manager
 
-> The simplest way to create and manage FiveM servers. Just download, click, and go!
+> A professional CLI tool for creating and managing FiveM servers with optimized configuration and automated mod conversion.
 
 [![Download](https://img.shields.io/github/v/release/VexoaXYZ/InkWash?label=Download&style=for-the-badge&logo=github)](https://github.com/VexoaXYZ/InkWash/releases/latest)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows-blue?style=for-the-badge&logo=windows)](https://github.com/VexoaXYZ/InkWash)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue?style=for-the-badge)](https://github.com/VexoaXYZ/InkWash)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/VexoaXYZ/InkWash?style=for-the-badge)](go.mod)
 
 ---
 
-## 🚀 Super Quick Start (3 Steps!)
+## Quick Install
 
-### Step 1: Download InkWash
-👉 **[Click here to download the latest version](https://github.com/VexoaXYZ/InkWash/releases/latest)**
-
-Look for the file called `inkwash-windows-amd64.zip` and download it.
-
-### Step 2: Extract the File
-1. Right-click on the downloaded ZIP file
-2. Click "Extract All..."
-3. Choose where you want to extract it
-4. Click "Extract"
-
-### Step 3: Run InkWash
-1. Open the folder where you extracted the files
-2. Double-click on `inkwash.exe`
-3. Done! The program is now running
-
----
-
-## 📦 What Can InkWash Do?
-
-✅ **Create FiveM Servers** - Set up a new server in minutes with a step-by-step wizard
-✅ **Convert GTA5 Mods** - Turn GTA5 mods into FiveM resources automatically
-✅ **Manage Servers** - Start, stop, and monitor all your servers easily
-✅ **Beautiful Interface** - Modern, colorful terminal UI that's easy to understand
-✅ **Safe & Secure** - Your license keys are encrypted and stored safely
-
----
-
-## 🎮 How to Use InkWash
-
-### Creating Your First Server
-
-1. Open Command Prompt (Press `Win + R`, type `cmd`, press Enter)
-2. Navigate to where you extracted InkWash
-3. Type: `inkwash.exe create`
-4. Follow the wizard! It will ask you simple questions like:
-   - What do you want to name your server?
-   - Which FiveM version do you want?
-   - What's your license key?
-
-The wizard guides you through everything step-by-step!
-
-### Converting GTA5 Mods to FiveM
-
-1. Open Command Prompt
-2. Navigate to your InkWash folder
-3. Type: `inkwash.exe convert`
-4. The wizard will ask you:
-   - Which server do you want to add mods to?
-   - What's the GTA5-mods.com URL?
-5. InkWash will automatically download, convert, and install the mod!
-
-### Managing Your Servers
-
-**Start a Server:**
-```
-inkwash.exe start my-server-name
+### Windows (PowerShell)
+```powershell
+irm https://raw.githubusercontent.com/VexoaXYZ/InkWash/master/install.ps1 | iex
 ```
 
-**Stop a Server:**
-```
-inkwash.exe stop my-server-name
-```
-
-**See All Servers:**
-```
-inkwash.exe list
-```
-
-**View Server Logs:**
-```
-inkwash.exe logs my-server-name
-```
-
----
-
-## 💡 Common Questions
-
-### Where do I get a FiveM license key?
-1. Go to https://keymaster.fivem.net/
-2. Log in with your FiveM account
-3. Create a new server key
-4. Copy the key (it starts with `cfxk_`)
-
-### How do I add my license key to InkWash?
-```
-inkwash.exe key add
-```
-Then paste your license key when it asks!
-
-### My server isn't starting, what do I do?
-1. Check your license key is correct: `inkwash.exe key list`
-2. Check server logs: `inkwash.exe logs your-server-name`
-3. Make sure no other program is using port 30120
-
-### Can I use InkWash without knowing how to code?
-**Yes!** InkWash is designed to be super easy. You don't need to know any coding. Just follow the wizard and answer the questions!
-
----
-
-## 🛠️ All Commands
-
-### Server Commands
-
-| Command | What it does |
-|---------|-------------|
-| `inkwash.exe create` | Create a new server (opens wizard) |
-| `inkwash.exe start <name>` | Start a server |
-| `inkwash.exe stop <name>` | Stop a server |
-| `inkwash.exe list` | Show all your servers |
-| `inkwash.exe logs <name>` | View server logs |
-
-### Mod Converter Commands
-
-| Command | What it does |
-|---------|-------------|
-| `inkwash.exe convert` | Convert GTA5 mods (opens wizard) |
-
-### License Key Commands
-
-| Command | What it does |
-|---------|-------------|
-| `inkwash.exe key add` | Add a license key |
-| `inkwash.exe key list` | Show all your keys (hidden) |
-| `inkwash.exe key remove <id>` | Delete a key |
-
----
-
-## 🎯 Features in Detail
-
-### 🧙 Interactive Wizards
-Never get lost! Our wizards guide you through every step with helpful hints and tips.
-
-### 🎨 Beautiful UI
-InkWash looks good and is easy to read with colors that help you understand what's happening.
-
-### ⚡ Super Fast
-InkWash is built in Go, making it lightning fast. Servers start in seconds!
-
-### 🔐 Secure
-Your license keys are encrypted with military-grade AES-256 encryption. They're safe!
-
-### 🌐 Auto-Updates
-Download new versions from our [Releases page](https://github.com/VexoaXYZ/InkWash/releases) whenever they come out!
-
----
-
-## 📚 Need More Help?
-
-- 📖 [Check out our Wiki](https://github.com/VexoaXYZ/InkWash/wiki) for detailed guides
-- 🐛 [Report a Bug](https://github.com/VexoaXYZ/InkWash/issues)
-- 💬 Join our Discord: [Coming Soon]
-- 📧 Email: [Your Email]
-
----
-
-## 🎓 For Advanced Users
-
-### Install with Go
-If you're a developer and have Go installed:
+### Linux & macOS
 ```bash
-go install github.com/VexoaXYZ/inkwash@latest
+curl -fsSL https://raw.githubusercontent.com/VexoaXYZ/InkWash/master/install.sh | bash
 ```
 
-### Build from Source
+The installer automatically:
+- Downloads the latest release
+- Extracts and installs the binary
+- Adds InkWash to your PATH
+- Configures your environment
+
+---
+
+## Features
+
+**Server Management**
+- **Interactive Setup Wizard** - Step-by-step server creation with intelligent defaults
+- **Multi-Server Support** - Create and manage unlimited FiveM servers
+- **Automated Installation** - Downloads and configures FiveM binaries automatically
+- **Process Management** - Start, stop, and monitor servers with built-in process control
+
+**Mod Conversion**
+- **GTA5 to FiveM Converter** - Automatically converts GTA5 mods to FiveM resources
+- **Batch Processing** - Queue multiple mods for conversion
+- **Rate Limiting** - Respects API limits with intelligent throttling (max 2 concurrent)
+- **Parallel Downloads** - Optimized download performance
+
+**Security & Configuration**
+- **Encrypted Key Storage** - AES-256-GCM encryption for license keys
+- **Secure Configuration** - Environment-based configuration management
+- **Optimized Defaults** - Production-ready server configurations out of the box
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- **FiveM License Key**: Obtain from [Cfx.re Portal](https://portal.cfx.re/servers/registration-keys)
+- **Operating System**: Windows 10+, Linux, or macOS
+- **Disk Space**: ~500MB minimum per server
+
+### Installation
+
+#### Automated Install (Recommended)
+
+**Windows:**
+```powershell
+irm https://raw.githubusercontent.com/VexoaXYZ/InkWash/master/install.ps1 | iex
+```
+
+**Linux/macOS:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/VexoaXYZ/InkWash/master/install.sh | bash
+```
+
+#### Manual Install
+
+1. Download the latest release for your platform from the [Releases page](https://github.com/VexoaXYZ/InkWash/releases/latest)
+2. Extract the archive to your desired location
+3. Add the binary location to your PATH (optional)
+4. Run `inkwash` from your terminal
+
+#### Build from Source
+
 ```bash
 git clone https://github.com/VexoaXYZ/InkWash.git
 cd InkWash
-go build -o inkwash.exe .
+go build -o inkwash .
 ```
 
-### Add to PATH (Windows)
-So you can use `inkwash` from anywhere:
-1. Press `Win + R`, type `sysdm.cpl`, press Enter
-2. Go to "Advanced" tab
-3. Click "Environment Variables"
-4. Under "System Variables", find "Path"
-5. Click "Edit" → "New"
-6. Paste the folder path where `inkwash.exe` is located
-7. Click OK on everything
-8. Restart Command Prompt
+---
 
-Now you can just type `inkwash` from anywhere!
+## Usage
+
+### Creating a Server
+
+```bash
+inkwash create
+```
+
+The interactive wizard will guide you through:
+1. Server name and directory
+2. FiveM version selection
+3. License key configuration
+4. Port and network settings
+
+### Managing Servers
+
+```bash
+# List all servers
+inkwash list
+
+# Start a server
+inkwash start <server-name>
+
+# Stop a server
+inkwash stop <server-name>
+
+# View server logs
+inkwash logs <server-name>
+```
+
+### Converting GTA5 Mods
+
+```bash
+inkwash convert
+```
+
+Supports:
+- Direct URLs from [gta5-mods.com](https://www.gta5-mods.com/)
+- Batch conversion with URL lists
+- Automatic resource installation
+
+### License Key Management
+
+```bash
+# Add a license key
+inkwash key add
+
+# List configured keys (masked)
+inkwash key list
+
+# Remove a key
+inkwash key remove <key-id>
+```
 
 ---
 
-## 📜 License
+## Command Reference
 
-InkWash is free and open source under the [MIT License](LICENSE).
+### Server Commands
+
+| Command | Description |
+|---------|-------------|
+| `inkwash create` | Launch server creation wizard |
+| `inkwash start <name>` | Start a FiveM server |
+| `inkwash stop <name>` | Stop a running server |
+| `inkwash list` | List all configured servers |
+| `inkwash logs <name>` | Stream server logs in real-time |
+
+### Mod Converter
+
+| Command | Description |
+|---------|-------------|
+| `inkwash convert` | Launch GTA5 mod converter wizard |
+
+### License Keys
+
+| Command | Description |
+|---------|-------------|
+| `inkwash key add` | Add a new FiveM license key |
+| `inkwash key list` | List all stored keys (masked) |
+| `inkwash key remove <id>` | Remove a license key |
 
 ---
 
-## ❤️ Made with Love
+## Configuration
 
-Created by [Vexoa](https://github.com/VexoaXYZ) to make FiveM server management easy for everyone.
+InkWash stores configuration in:
+- **Windows**: `%APPDATA%\inkwash\`
+- **Linux/macOS**: `~/.config/inkwash/`
 
-**Version 2.0** - Complete rewrite with better everything!
+### Configuration Files
+
+- `config.json` - Global settings
+- `keys.encrypted` - Encrypted license keys
+- `servers/` - Per-server configurations
+
+---
+
+## FAQ
+
+### Where do I get a FiveM license key?
+
+Visit the [Cfx.re Portal](https://portal.cfx.re/servers/registration-keys) to:
+1. Log in with your Cfx.re account
+2. Register a new server
+3. Copy your license key (starts with `cfxk_`)
+
+### How do I update InkWash?
+
+Run the install script again, or download the latest release manually. Your configuration and servers will be preserved.
+
+### My server won't start
+
+**Troubleshooting steps:**
+1. Verify your license key: `inkwash key list`
+2. Check server logs: `inkwash logs <server-name>`
+3. Ensure port 30120 is available
+4. Verify FiveM binary integrity
+
+### Can I use custom server configurations?
+
+Yes. InkWash creates standard FiveM server directories. You can manually edit `server.cfg` and other configuration files in your server directory.
+
+### Does InkWash work on headless servers?
+
+Yes. InkWash is fully compatible with headless Linux servers and can be used in automated deployment pipelines.
+
+---
+
+## Architecture
+
+InkWash is built with:
+- **Language**: Go 1.24+
+- **TUI Framework**: Bubble Tea
+- **Encryption**: AES-256-GCM
+- **Build Tool**: GoReleaser
+- **CI/CD**: GitHub Actions
+
+### Project Structure
+
+```
+inkwash/
+├── cmd/           # CLI commands
+├── internal/      # Core business logic
+│   ├── config/    # Configuration management
+│   ├── server/    # Server management
+│   ├── converter/ # Mod converter
+│   └── crypto/    # Encryption utilities
+├── pkg/types/     # Shared types
+└── main.go        # Entry point
+```
+
+---
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+### Development Setup
+
+```bash
+# Clone repository
+git clone https://github.com/VexoaXYZ/InkWash.git
+cd InkWash
+
+# Install dependencies
+go mod download
+
+# Run tests
+go test ./...
+
+# Build
+go build -o inkwash .
+```
+
+---
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
+
+---
+
+## License
+
+InkWash is open source software licensed under the [MIT License](LICENSE).
+
+---
+
+## Support
+
+- **Documentation**: [GitHub Wiki](https://github.com/VexoaXYZ/InkWash/wiki)
+- **Issues**: [GitHub Issues](https://github.com/VexoaXYZ/InkWash/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/VexoaXYZ/InkWash/discussions)
+
+---
+
+## Acknowledgments
+
+Created by [Vexoa](https://github.com/VexoaXYZ) for the FiveM community.
+
+**Version 2.0** - Complete rewrite with enhanced performance, security, and usability.
 
 ---
 
@@ -214,6 +298,6 @@ Created by [Vexoa](https://github.com/VexoaXYZ) to make FiveM server management 
 
 ### Ready to get started?
 
-**[📥 Download InkWash Now](https://github.com/VexoaXYZ/InkWash/releases/latest)**
+**[Download InkWash](https://github.com/VexoaXYZ/InkWash/releases/latest)** | **[View Documentation](https://github.com/VexoaXYZ/InkWash/wiki)** | **[Report Issue](https://github.com/VexoaXYZ/InkWash/issues)**
 
 </div>

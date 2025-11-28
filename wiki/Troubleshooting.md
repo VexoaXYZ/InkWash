@@ -68,7 +68,7 @@ Before diving into specific problems, try these:
 1. Check the key is correct (starts with `cfxk_`)
 2. Make sure you copied the **entire key**
 3. No spaces before or after the key
-4. Get a new key from https://keymaster.fivem.net
+4. Get a new key from https://portal.cfx.re/servers/registration-keys
 
 ### "Server name already exists"
 
