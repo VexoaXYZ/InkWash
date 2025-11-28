@@ -18,17 +18,17 @@ NC='\033[0m' # No Color
 
 # Helper functions
 print_header() {
-    echo -e "${CYAN}🎨 InkWash Installer${NC}"
-    echo -e "${CYAN}====================${NC}"
+    echo -e "${CYAN}InkWash Installer${NC}"
+    echo -e "${CYAN}==================${NC}"
     echo ""
 }
 
 print_error() {
-    echo -e "${RED}❌ $1${NC}" >&2
+    echo -e "${RED}ERROR: $1${NC}" >&2
 }
 
 print_success() {
-    echo -e "${GREEN}✅ $1${NC}"
+    echo -e "${GREEN}$1${NC}"
 }
 
 print_info() {
@@ -55,13 +55,15 @@ detect_platform() {
         arm64)      arch="arm64" ;;
         aarch64)    arch="arm64" ;;
         armv7l)     arch="arm" ;;
+        i686)       arch="386" ;;
+        i386)       arch="386" ;;
         *)
             print_error "Unsupported architecture: $(uname -m)"
             exit 1
             ;;
     esac
 
-    echo "${os}-${arch}"
+    echo "${os}_${arch}"
 }
 
 # Main installation
@@ -69,13 +71,13 @@ main() {
     print_header
 
     # Detect platform
-    print_info "🔍 Detecting platform..."
+    print_info "Detecting platform..."
     platform=$(detect_platform)
     echo "   Platform: $platform"
 
     # Get latest release
     print_info ""
-    print_info "📡 Fetching latest release..."
+    print_info "Fetching latest release..."
 
     release_json=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest")
     version=$(echo "$release_json" | grep '"tag_name"' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
@@ -87,8 +89,8 @@ main() {
 
     echo "   Latest version: $version"
 
-    # Find download URL for platform
-    download_url=$(echo "$release_json" | grep "browser_download_url.*${platform}" | sed -E 's/.*"browser_download_url": "([^"]+)".*/\1/' | head -n 1)
+    # Find download URL for platform (supports both naming conventions)
+    download_url=$(echo "$release_json" | grep "browser_download_url" | grep -E "${platform}\.(tar\.gz|zip)" | sed -E 's/.*"browser_download_url": "([^"]+)".*/\1/' | head -n 1)
 
     if [ -z "$download_url" ]; then
         print_error "No release found for platform: $platform"
@@ -97,17 +99,19 @@ main() {
         exit 1
     fi
 
+    print_info "Found asset: $(basename "$download_url")"
+
     # Create install directory
     print_info ""
-    print_info "📁 Installing to: $INSTALL_DIR"
+    print_info "Installing to: $INSTALL_DIR"
     mkdir -p "$INSTALL_DIR"
 
     # Download and extract
     print_info ""
-    print_info "⬇️  Downloading InkWash $version..."
+    print_info "Downloading InkWash $version..."
 
     tmp_dir=$(mktemp -d)
-    archive_name="inkwash-${platform}.tar.gz"
+    archive_name=$(basename "$download_url")
     archive_path="$tmp_dir/$archive_name"
 
     if ! curl -fsSL -o "$archive_path" "$download_url"; then
@@ -120,15 +124,26 @@ main() {
 
     # Extract
     print_info ""
-    print_info "📦 Extracting files..."
+    print_info "Extracting files..."
 
-    tar -xzf "$archive_path" -C "$tmp_dir"
+    # Detect archive type and extract accordingly
+    if [[ "$archive_name" == *.tar.gz ]]; then
+        tar -xzf "$archive_path" -C "$tmp_dir"
+    elif [[ "$archive_name" == *.zip ]]; then
+        unzip -q "$archive_path" -d "$tmp_dir"
+    else
+        print_error "Unsupported archive format: $archive_name"
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
 
     # Find the binary (might be in a subdirectory)
     binary_path=$(find "$tmp_dir" -name "$BINARY_NAME" -type f | head -n 1)
 
     if [ -z "$binary_path" ]; then
         print_error "Binary not found in archive"
+        print_info "Archive contents:"
+        ls -R "$tmp_dir"
         rm -rf "$tmp_dir"
         exit 1
     fi
@@ -144,7 +159,7 @@ main() {
 
     # Check if install dir is in PATH
     print_info ""
-    print_info "🔧 Checking PATH..."
+    print_info "Checking PATH..."
 
     if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
         print_info "   $INSTALL_DIR is not in your PATH"
@@ -180,12 +195,13 @@ main() {
     echo ""
     print_success "InkWash installed successfully!"
     echo ""
-    print_info "🚀 Quick Start:"
+    print_info "Quick Start:"
     echo "   1. Open a new terminal (or run: source $profile)"
     echo "   2. Run: inkwash create"
     echo ""
-    print_info "📚 Documentation: https://github.com/$REPO/wiki"
-    print_info "🐛 Issues: https://github.com/$REPO/issues"
+    print_info "Documentation: https://github.com/$REPO/wiki"
+    print_info "Get License Key: https://portal.cfx.re/servers/registration-keys"
+    print_info "Report Issues: https://github.com/$REPO/issues"
     echo ""
 }
 
