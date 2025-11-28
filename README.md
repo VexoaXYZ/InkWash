@@ -22,14 +22,62 @@ Inkwash brings the polish of modern web applications (Vercel, Linear) to termina
 
 ### Installation
 
-**From Source:**
+#### Windows
+
+**Option 1: Pre-built Binary (Recommended)**
+1. Download the latest `inkwash-windows-amd64.zip` from [Releases](https://github.com/VexoaXYZ/InkWash/releases)
+2. Extract the ZIP file
+3. Run `inkwash.exe`
+4. (Optional) Add to PATH for global access
+
+**Option 2: Scoop Package Manager**
+```powershell
+scoop bucket add vexoa https://github.com/VexoaXYZ/scoop-bucket
+scoop install inkwash
+```
+Benefits: Automatic PATH setup, easy updates with `scoop update inkwash`
+
+**Option 3: Go Install**
 ```bash
-git clone https://github.com/VexoaXYZ/inkwash.git
-cd inkwash
+go install github.com/VexoaXYZ/inkwash@latest
+```
+Requires Go 1.24 or higher
+
+#### macOS / Linux
+
+**Pre-built Binary**
+
+Download the appropriate binary for your system from [Releases](https://github.com/VexoaXYZ/InkWash/releases):
+- macOS (Intel): `inkwash-darwin-amd64`
+- macOS (Apple Silicon): `inkwash-darwin-arm64`
+- Linux (amd64): `inkwash-linux-amd64`
+
+```bash
+# Make executable
+chmod +x inkwash-*
+
+# Move to PATH (optional)
+sudo mv inkwash-* /usr/local/bin/inkwash
+```
+
+**Go Install**
+```bash
+go install github.com/VexoaXYZ/inkwash@latest
+```
+
+#### From Source
+
+```bash
+git clone https://github.com/VexoaXYZ/InkWash.git
+cd InkWash
 make build
 ```
 
-**Or download pre-built binaries from [Releases](https://github.com/VexoaXYZ/inkwash/releases)**
+### Updating
+
+- **Scoop:** `scoop update inkwash`
+- **Binary:** Download new release manually from GitHub
+- **Go:** `go install github.com/VexoaXYZ/inkwash@latest`
 
 ### Basic Usage
 
@@ -93,6 +141,20 @@ inkwash key list
 
 # Remove a key
 inkwash key remove <key-id>
+```
+
+### GTA5 Mod Converter
+
+```bash
+# Convert GTA5 mods to FiveM resources
+inkwash convert
+
+# Interactive wizard will guide you through:
+# 1. Select target server (or external path)
+# 2. Add GTA5-mods.com URLs (one per line, press Enter to add)
+# 3. Automatic conversion with rate limiting
+# 4. Parallel downloads with progress tracking
+# 5. Auto-extraction to category subfolders
 ```
 
 ## 🏗️ Architecture
