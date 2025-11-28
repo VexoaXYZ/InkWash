@@ -238,30 +238,40 @@ func (m *CreateWizardModel) handleEnter() (tea.Model, tea.Cmd) {
 		)
 
 	case StepBuild:
-		if m.buildSelector != nil && m.buildSelector.Confirmed {
-			if build, ok := m.buildSelector.SelectedValue().(types.Build); ok {
-				m.buildNumber = build.Number
-				m.step = StepLicenseKey
-				m.loadingKeys = true
-				return m, tea.Batch(
-					loadKeysCmd(m.keyVault),
-					m.spinner.TickCmd(),
-				)
+		if m.buildSelector != nil {
+			// Pass Enter to selector to confirm selection
+			m.buildSelector.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+			// If now confirmed, advance to next step
+			if m.buildSelector.Confirmed {
+				if build, ok := m.buildSelector.SelectedValue().(types.Build); ok {
+					m.buildNumber = build.Number
+					m.step = StepLicenseKey
+					m.loadingKeys = true
+					return m, tea.Batch(
+						loadKeysCmd(m.keyVault),
+						m.spinner.TickCmd(),
+					)
+				}
 			}
 		}
-		// Let the normal update flow handle the Enter key
 		return m, nil
 
 	case StepLicenseKey:
-		if m.keySelector != nil && m.keySelector.Confirmed {
-			if key, ok := m.keySelector.SelectedValue().(string); ok {
-				m.licenseKey = key
-				m.step = StepPort
-				m.portInput.Focus()
-				return m, m.portInput.BlinkCmd()
+		if m.keySelector != nil {
+			// Pass Enter to selector to confirm selection
+			m.keySelector.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+			// If now confirmed, advance to next step
+			if m.keySelector.Confirmed {
+				if key, ok := m.keySelector.SelectedValue().(string); ok {
+					m.licenseKey = key
+					m.step = StepPort
+					m.portInput.Focus()
+					return m, m.portInput.BlinkCmd()
+				}
 			}
 		}
-		// Let the normal update flow handle the Enter key
 		return m, nil
 
 	case StepPort:
