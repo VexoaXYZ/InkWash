@@ -1,391 +1,219 @@
-# Inkwash
+# 🎨 InkWash - Easy FiveM Server Manager
 
-> A world-class CLI tool for managing FiveM servers with beautiful animations and real-time metrics.
+> The simplest way to create and manage FiveM servers. Just download, click, and go!
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go)](https://golang.org)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/VexoaXYZ/inkwash)
-
-Inkwash brings the polish of modern web applications (Vercel, Linear) to terminal interfaces. Built in Go with a focus on performance, elegant design, and developer experience.
-
-## ✨ Features
-
-- 🎨 **Beautiful TUI** - Monochrome design with strategic purple accent
-- 🎭 **Auto-Adaptive Animations** - Scales based on terminal capabilities (3 tiers)
-- 📊 **Real-Time Metrics** - Live CPU/RAM/Network monitoring with sparklines
-- 💾 **Smart Caching** - LRU binary caching (saves bandwidth & time)
-- 🔐 **Encrypted Vault** - AES-256 license key storage (machine-bound)
-- ⚡ **Blazing Fast** - <50ms startup, <50MB memory footprint
-- 🌍 **Cross-Platform** - Windows & Linux support
-
-## 🚀 Quick Start
-
-### Installation
-
-#### Windows
-
-**Option 1: Pre-built Binary (Recommended)**
-1. Download the latest `inkwash-windows-amd64.zip` from [Releases](https://github.com/VexoaXYZ/InkWash/releases)
-2. Extract the ZIP file
-3. Run `inkwash.exe`
-4. (Optional) Add to PATH for global access
-
-**Option 2: Scoop Package Manager**
-```powershell
-scoop bucket add vexoa https://github.com/VexoaXYZ/scoop-bucket
-scoop install inkwash
-```
-Benefits: Automatic PATH setup, easy updates with `scoop update inkwash`
-
-**Option 3: Go Install**
-```bash
-go install github.com/VexoaXYZ/inkwash@latest
-```
-Requires Go 1.24 or higher
-
-#### macOS / Linux
-
-**Pre-built Binary**
-
-Download the appropriate binary for your system from [Releases](https://github.com/VexoaXYZ/InkWash/releases):
-- macOS (Intel): `inkwash-darwin-amd64`
-- macOS (Apple Silicon): `inkwash-darwin-arm64`
-- Linux (amd64): `inkwash-linux-amd64`
-
-```bash
-# Make executable
-chmod +x inkwash-*
-
-# Move to PATH (optional)
-sudo mv inkwash-* /usr/local/bin/inkwash
-```
-
-**Go Install**
-```bash
-go install github.com/VexoaXYZ/inkwash@latest
-```
-
-#### From Source
-
-```bash
-git clone https://github.com/VexoaXYZ/InkWash.git
-cd InkWash
-make build
-```
-
-### Updating
-
-- **Scoop:** `scoop update inkwash`
-- **Binary:** Download new release manually from GitHub
-- **Go:** `go install github.com/VexoaXYZ/inkwash@latest`
-
-### Basic Usage
-
-```bash
-# Add a license key (encrypted storage)
-inkwash key add
-
-# Create a server
-inkwash create my-server --build 17000 --key <key-id>
-
-# Start the server
-inkwash start my-server
-
-# View logs
-inkwash logs my-server -n 100
-
-# List all servers
-inkwash list
-
-# Stop the server
-inkwash stop my-server
-```
-
-## 📖 Commands
-
-### Server Management
-
-```bash
-# Create a new server
-inkwash create <name> [flags]
-  --build      FXServer build number (default: 17000)
-  --key        License key ID from vault
-  --port       Server port (default: 30120)
-  --path       Installation path
-
-# Start server
-inkwash start <name>
-
-# Stop server
-inkwash stop <name>
-
-# List all servers with status
-inkwash list
-
-# View server logs
-inkwash logs <name>
-  -f, --follow    Follow log output (tail -f)
-  -n, --lines     Number of lines to show (default: 50)
-```
-
-### License Key Management
-
-```bash
-# Add new license key
-inkwash key add
-  -l, --label    Label for the key
-  -k, --key      License key (cfxk_...)
-
-# List all keys (masked display)
-inkwash key list
-
-# Remove a key
-inkwash key remove <key-id>
-```
-
-### GTA5 Mod Converter
-
-```bash
-# Convert GTA5 mods to FiveM resources
-inkwash convert
-
-# Interactive wizard will guide you through:
-# 1. Select target server (or external path)
-# 2. Add GTA5-mods.com URLs (one per line, press Enter to add)
-# 3. Automatic conversion with rate limiting
-# 4. Parallel downloads with progress tracking
-# 5. Auto-extraction to category subfolders
-```
-
-## 🏗️ Architecture
-
-### Project Structure
-
-```
-inkwash/
-├── cmd/                      # CLI commands
-│   ├── root.go               # Root command & config
-│   ├── create.go             # Server creation
-│   ├── start.go / stop.go    # Process management
-│   ├── list.go / logs.go     # Server info
-│   └── key.go                # License key vault
-│
-├── internal/
-│   ├── ui/                   # User interface
-│   │   ├── animation/        # Easing & transitions
-│   │   ├── components/       # Progress, spinner, sparkline
-│   │   ├── styles.go         # Monochrome theme
-│   │   └── detector.go       # Terminal capability detection
-│   │
-│   ├── server/               # Server management
-│   │   ├── installer.go      # Installation orchestration
-│   │   ├── process.go        # Start/stop/status
-│   │   ├── config.go         # server.cfg generation
-│   │   └── metrics.go        # Real-time metrics
-│   │
-│   ├── download/             # Download system
-│   │   ├── artifacts.go      # FiveM API client
-│   │   ├── downloader.go     # Parallel downloads
-│   │   └── extractor.go      # Archive extraction
-│   │
-│   ├── cache/                # Caching & storage
-│   │   ├── binary.go         # FXServer cache (LRU)
-│   │   ├── metadata.go       # Cache metadata
-│   │   └── keys.go           # License vault (AES-256)
-│   │
-│   └── registry/             # Server registry
-│       ├── registry.go       # JSON storage
-│       └── config.go         # Path helpers
-│
-└── pkg/types/                # Shared types
-    ├── server.go / build.go / metrics.go
-```
-
-### Design Philosophy: "Monochrome Elegance"
-
-**Color Palette:**
-- Monochrome foundation (whites → grays → blacks)
-- Single purple accent (#7C3AED) for emphasis
-- Semantic colors only for status (success, error, warning)
-
-**Animation Tiers:**
-| Tier | Description | Features |
-|------|-------------|----------|
-| **Minimal** | Basic terminals | Simple spinners, no effects |
-| **Balanced** | Default | Smooth animations, no shimmer |
-| **Full** | Modern terminals | All effects + shimmer + particles |
-
-Auto-detected based on:
-- Terminal capabilities (ANSI 256-color support)
-- System resources (CPU cores, RAM)
-- Terminal emulator (Windows Terminal, iTerm2, etc.)
-
-## 🎨 Screenshots
-
-```
-$ inkwash list
-
-SERVERS
-
-  ● Running  production-rp
-      Port: 30120
-      C:\FXServer\production-rp
-      RAM: 2.14 GB
-
-  ○ Stopped  dev-server
-      Port: 30121
-      C:\FXServer\dev-server
-
-Total: 2 server(s)
-```
-
-```
-$ inkwash key list
-
-LICENSE KEYS
-
-  Production
-    ID:  a1b2c3d4-e5f6-7890-abcd-ef1234567890
-    Key: cfxk_********************xj2k
-    Created: Jan 15, 2025
-
-Total: 1 key(s)
-```
-
-## ⚙️ Configuration
-
-**Config Location:**
-- Windows: `%APPDATA%\inkwash\config.yaml`
-- Linux: `~/.config/inkwash/config.yaml`
-
-**Example Configuration:**
-```yaml
-version: 1
-
-defaults:
-  install_path: "C:\\FXServer"  # Windows
-  # install_path: "~/fxserver"  # Linux
-  port: 30120
-
-cache:
-  enabled: true
-  max_builds: 3                 # LRU eviction
-
-ui:
-  theme: "purple"               # Accent color
-  animations: "auto"            # auto, full, balanced, minimal
-  refresh_interval: 2           # Dashboard refresh (seconds)
-
-telemetry:
-  enabled: true                 # Opt-out analytics
-
-advanced:
-  parallel_downloads: true
-  download_chunks: 3
-  log_level: "info"
-```
-
-## 🔧 Development
-
-### Prerequisites
-- Go 1.21+
-- Git
-- Modern terminal (Windows Terminal, iTerm2, Alacritty recommended)
-
-### Building
-
-```bash
-# Development build
-make build
-
-# All platforms
-make build-all
-
-# Run tests
-make test
-
-# Clean build artifacts
-make clean
-```
-
-### Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| [Bubble Tea](https://github.com/charmbracelet/bubbletea) | TUI framework |
-| [Lipgloss](https://github.com/charmbracelet/lipgloss) | Styling & layouts |
-| [Cobra](https://github.com/spf13/cobra) | CLI framework |
-| [Viper](https://github.com/spf13/viper) | Configuration |
-| [gopsutil](https://github.com/shirou/gopsutil) | System metrics |
-
-Full dependency list in [go.mod](go.mod)
-
-## 🎯 Performance
-
-**Benchmarks:**
-- Cold start: <50ms (p95)
-- Memory baseline: <50MB
-- Download speed: Matches browser (3-chunk parallel)
-- Animation: 60fps on modern terminals
-
-## 🛣️ Roadmap
-
-### v1.0 (Current) ✅
-- ✅ Server installation & management
-- ✅ Process lifecycle (start/stop)
-- ✅ License key vault
-- ✅ Binary caching
-- ✅ Real-time metrics
-- ✅ Cross-platform support
-
-### v1.1 (In Progress)
-- ✅ Interactive creation wizard
-- [ ] GTA5Mods > Server Auto Converter powered by ZeroDream
-
-### v1.2 (Planned)
-- [ ] FiveM Vehicle Merger
-- [ ] Interactive TUI dashboard
-- [ ] Server templates
-
-### v2.0 (Future)
-- [ ] Resource marketplace
-- [ ] Automatic backups
-- [ ] Discord integration
-- [ ] Web dashboard
-- [ ] Multi-server orchestration
-- [ ] Resource management (start/stop/restart individual resources)
-- [ ] Log streaming/viewing
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-**TL;DR:** You can freely use, modify, and distribute this software, even commercially. Just keep the copyright notice and license.
-
-## 🙏 Acknowledgments
-
-- Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) by Charm
-- Inspired by modern CLI tools (Vercel CLI, Linear CLI)
-- FiveM server artifacts by [Cfx.re](https://runtime.fivem.net/)
-
-## 📞 Support
-
-- 🐛 [Report a bug](https://github.com/VexoaXYZ/inkwash/issues)
-- 💡 [Request a feature](https://github.com/VexoaXYZ/inkwash/issues)
-- 💬 [Discussions](https://github.com/VexoaXYZ/inkwash/discussions)
+[![Download](https://img.shields.io/github/v/release/VexoaXYZ/InkWash?label=Download&style=for-the-badge&logo=github)](https://github.com/VexoaXYZ/InkWash/releases/latest)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows-blue?style=for-the-badge&logo=windows)](https://github.com/VexoaXYZ/InkWash)
 
 ---
 
-**Made with ❤️ by [@VexoaXYZ](https://github.com/VexoaXYZ)**
+## 🚀 Super Quick Start (3 Steps!)
 
-*Inkwash - Because your FiveM servers deserve better management.*
+### Step 1: Download InkWash
+👉 **[Click here to download the latest version](https://github.com/VexoaXYZ/InkWash/releases/latest)**
+
+Look for the file called `inkwash-windows-amd64.zip` and download it.
+
+### Step 2: Extract the File
+1. Right-click on the downloaded ZIP file
+2. Click "Extract All..."
+3. Choose where you want to extract it
+4. Click "Extract"
+
+### Step 3: Run InkWash
+1. Open the folder where you extracted the files
+2. Double-click on `inkwash.exe`
+3. Done! The program is now running
+
+---
+
+## 📦 What Can InkWash Do?
+
+✅ **Create FiveM Servers** - Set up a new server in minutes with a step-by-step wizard
+✅ **Convert GTA5 Mods** - Turn GTA5 mods into FiveM resources automatically
+✅ **Manage Servers** - Start, stop, and monitor all your servers easily
+✅ **Beautiful Interface** - Modern, colorful terminal UI that's easy to understand
+✅ **Safe & Secure** - Your license keys are encrypted and stored safely
+
+---
+
+## 🎮 How to Use InkWash
+
+### Creating Your First Server
+
+1. Open Command Prompt (Press `Win + R`, type `cmd`, press Enter)
+2. Navigate to where you extracted InkWash
+3. Type: `inkwash.exe create`
+4. Follow the wizard! It will ask you simple questions like:
+   - What do you want to name your server?
+   - Which FiveM version do you want?
+   - What's your license key?
+
+The wizard guides you through everything step-by-step!
+
+### Converting GTA5 Mods to FiveM
+
+1. Open Command Prompt
+2. Navigate to your InkWash folder
+3. Type: `inkwash.exe convert`
+4. The wizard will ask you:
+   - Which server do you want to add mods to?
+   - What's the GTA5-mods.com URL?
+5. InkWash will automatically download, convert, and install the mod!
+
+### Managing Your Servers
+
+**Start a Server:**
+```
+inkwash.exe start my-server-name
+```
+
+**Stop a Server:**
+```
+inkwash.exe stop my-server-name
+```
+
+**See All Servers:**
+```
+inkwash.exe list
+```
+
+**View Server Logs:**
+```
+inkwash.exe logs my-server-name
+```
+
+---
+
+## 💡 Common Questions
+
+### Where do I get a FiveM license key?
+1. Go to https://keymaster.fivem.net/
+2. Log in with your FiveM account
+3. Create a new server key
+4. Copy the key (it starts with `cfxk_`)
+
+### How do I add my license key to InkWash?
+```
+inkwash.exe key add
+```
+Then paste your license key when it asks!
+
+### My server isn't starting, what do I do?
+1. Check your license key is correct: `inkwash.exe key list`
+2. Check server logs: `inkwash.exe logs your-server-name`
+3. Make sure no other program is using port 30120
+
+### Can I use InkWash without knowing how to code?
+**Yes!** InkWash is designed to be super easy. You don't need to know any coding. Just follow the wizard and answer the questions!
+
+---
+
+## 🛠️ All Commands
+
+### Server Commands
+
+| Command | What it does |
+|---------|-------------|
+| `inkwash.exe create` | Create a new server (opens wizard) |
+| `inkwash.exe start <name>` | Start a server |
+| `inkwash.exe stop <name>` | Stop a server |
+| `inkwash.exe list` | Show all your servers |
+| `inkwash.exe logs <name>` | View server logs |
+
+### Mod Converter Commands
+
+| Command | What it does |
+|---------|-------------|
+| `inkwash.exe convert` | Convert GTA5 mods (opens wizard) |
+
+### License Key Commands
+
+| Command | What it does |
+|---------|-------------|
+| `inkwash.exe key add` | Add a license key |
+| `inkwash.exe key list` | Show all your keys (hidden) |
+| `inkwash.exe key remove <id>` | Delete a key |
+
+---
+
+## 🎯 Features in Detail
+
+### 🧙 Interactive Wizards
+Never get lost! Our wizards guide you through every step with helpful hints and tips.
+
+### 🎨 Beautiful UI
+InkWash looks good and is easy to read with colors that help you understand what's happening.
+
+### ⚡ Super Fast
+InkWash is built in Go, making it lightning fast. Servers start in seconds!
+
+### 🔐 Secure
+Your license keys are encrypted with military-grade AES-256 encryption. They're safe!
+
+### 🌐 Auto-Updates
+Download new versions from our [Releases page](https://github.com/VexoaXYZ/InkWash/releases) whenever they come out!
+
+---
+
+## 📚 Need More Help?
+
+- 📖 [Check out our Wiki](https://github.com/VexoaXYZ/InkWash/wiki) for detailed guides
+- 🐛 [Report a Bug](https://github.com/VexoaXYZ/InkWash/issues)
+- 💬 Join our Discord: [Coming Soon]
+- 📧 Email: [Your Email]
+
+---
+
+## 🎓 For Advanced Users
+
+### Install with Go
+If you're a developer and have Go installed:
+```bash
+go install github.com/VexoaXYZ/inkwash@latest
+```
+
+### Build from Source
+```bash
+git clone https://github.com/VexoaXYZ/InkWash.git
+cd InkWash
+go build -o inkwash.exe .
+```
+
+### Add to PATH (Windows)
+So you can use `inkwash` from anywhere:
+1. Press `Win + R`, type `sysdm.cpl`, press Enter
+2. Go to "Advanced" tab
+3. Click "Environment Variables"
+4. Under "System Variables", find "Path"
+5. Click "Edit" → "New"
+6. Paste the folder path where `inkwash.exe` is located
+7. Click OK on everything
+8. Restart Command Prompt
+
+Now you can just type `inkwash` from anywhere!
+
+---
+
+## 📜 License
+
+InkWash is free and open source under the [MIT License](LICENSE).
+
+---
+
+## ❤️ Made with Love
+
+Created by [Vexoa](https://github.com/VexoaXYZ) to make FiveM server management easy for everyone.
+
+**Version 2.0** - Complete rewrite with better everything!
+
+---
+
+<div align="center">
+
+### Ready to get started?
+
+**[📥 Download InkWash Now](https://github.com/VexoaXYZ/InkWash/releases/latest)**
+
+</div>
