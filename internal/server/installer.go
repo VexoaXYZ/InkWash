@@ -59,7 +59,7 @@ func (inst *Installer) Install(
 	port int,
 	onProgress ProgressCallback,
 ) error {
-	totalSteps := 7
+	totalSteps := 8
 
 	// Step 1: Validate inputs
 	inst.reportProgress(onProgress, InstallProgress{
@@ -82,7 +82,7 @@ func (inst *Installer) Install(
 	})
 
 	serverPath := filepath.Join(installPath, serverName)
-	binaryPath := filepath.Join(installPath, "server")
+	binaryPath := filepath.Join(serverPath, "bin")
 
 	if err := inst.createDirectories(serverPath, binaryPath); err != nil {
 		return fmt.Errorf("failed to create directories: %w", err)
@@ -96,7 +96,8 @@ func (inst *Installer) Install(
 		CompletedSteps: 2,
 	})
 
-	if err := inst.installBinary(buildNumber, binaryPath, onProgress); err != nil {
+	targetBuild, err := inst.installBinary(buildNumber, binaryPath, onProgress)
+	if err != nil {
 		return fmt.Errorf("failed to install FXServer: %w", err)
 	}
 
@@ -112,45 +113,57 @@ func (inst *Installer) Install(
 		return fmt.Errorf("failed to clone server-data: %w", err)
 	}
 
-	// Step 5: Generate server.cfg
+	// Step 5: Create metadata.json
 	inst.reportProgress(onProgress, InstallProgress{
-		Step:           "Generating server.cfg",
-		Progress:       0.71,
+		Step:           "Creating server metadata",
+		Progress:       0.625,
 		TotalSteps:     totalSteps,
 		CompletedSteps: 5,
 	})
 
+	metadataManager := NewMetadataManager()
+	metadata := types.NewServerMetadata(*targetBuild)
+	if err := metadataManager.Save(serverPath, metadata); err != nil {
+		return fmt.Errorf("failed to save metadata: %w", err)
+	}
+
+	// Step 6: Generate server.cfg
+	inst.reportProgress(onProgress, InstallProgress{
+		Step:           "Generating server.cfg",
+		Progress:       0.75,
+		TotalSteps:     totalSteps,
+		CompletedSteps: 6,
+	})
+
 	server := &types.Server{
-		Name:       serverName,
-		Path:       serverPath,
-		BinaryPath: binaryPath,
-		Port:       port,
-		Build:      buildNumber,
-		Created:    time.Now(),
+		Name:    serverName,
+		Path:    serverPath,
+		Port:    port,
+		Created: time.Now(),
 	}
 
 	if err := inst.configGen.GenerateServerConfig(server, licenseKey); err != nil {
 		return fmt.Errorf("failed to generate config: %w", err)
 	}
 
-	// Step 6: Create launch script
+	// Step 7: Create launch script
 	inst.reportProgress(onProgress, InstallProgress{
 		Step:           "Creating launch script",
-		Progress:       0.85,
+		Progress:       0.875,
 		TotalSteps:     totalSteps,
-		CompletedSteps: 6,
+		CompletedSteps: 7,
 	})
 
 	if err := inst.configGen.GenerateLaunchScript(server); err != nil {
 		return fmt.Errorf("failed to create launch script: %w", err)
 	}
 
-	// Step 7: Register server
+	// Step 8: Register server
 	inst.reportProgress(onProgress, InstallProgress{
 		Step:           "Registering server",
 		Progress:       1.0,
 		TotalSteps:     totalSteps,
-		CompletedSteps: 7,
+		CompletedSteps: 8,
 	})
 
 	if err := inst.registry.Add(*server); err != nil {
@@ -160,24 +173,9 @@ func (inst *Installer) Install(
 	return nil
 }
 
-// installBinary installs the FXServer binary
-func (inst *Installer) installBinary(buildNumber int, binaryPath string, onProgress ProgressCallback) error {
-	// Check cache first
-	cachedPath, err := inst.cache.Get(buildNumber)
-	if err == nil {
-		// Copy from cache
-		inst.reportProgress(onProgress, InstallProgress{
-			Step:           "Copying from cache",
-			Progress:       0.35,
-			CurrentFile:    fmt.Sprintf("Build %d (cached)", buildNumber),
-			TotalSteps:     7,
-			CompletedSteps: 2,
-		})
-
-		return copyDir(cachedPath, binaryPath)
-	}
-
-	// Not in cache, need to download
+// installBinary installs the FXServer binary and returns the Build info
+func (inst *Installer) installBinary(buildNumber int, binaryPath string, onProgress ProgressCallback) (*types.Build, error) {
+	// Fetch available builds first (needed for metadata even if cached)
 	inst.reportProgress(onProgress, InstallProgress{
 		Step:           "Fetching build information",
 		Progress:       0.30,
@@ -185,10 +183,9 @@ func (inst *Installer) installBinary(buildNumber int, binaryPath string, onProgr
 		CompletedSteps: 2,
 	})
 
-	// Fetch available builds
 	builds, err := inst.artifactClient.FetchBuilds()
 	if err != nil {
-		return fmt.Errorf("failed to fetch builds: %w", err)
+		return nil, fmt.Errorf("failed to fetch builds: %w", err)
 	}
 
 	// Find the requested build
@@ -201,7 +198,25 @@ func (inst *Installer) installBinary(buildNumber int, binaryPath string, onProgr
 	}
 
 	if targetBuild == nil {
-		return fmt.Errorf("build %d not found", buildNumber)
+		return nil, fmt.Errorf("build %d not found", buildNumber)
+	}
+
+	// Check cache after getting build info
+	cachedPath, err := inst.cache.Get(buildNumber)
+	if err == nil {
+		// Copy from cache
+		inst.reportProgress(onProgress, InstallProgress{
+			Step:           "Copying from cache",
+			Progress:       0.35,
+			CurrentFile:    fmt.Sprintf("Build %d (cached)", buildNumber),
+			TotalSteps:     7,
+			CompletedSteps: 2,
+		})
+
+		if err := copyDir(cachedPath, binaryPath); err != nil {
+			return nil, err
+		}
+		return targetBuild, nil
 	}
 
 	// Download
@@ -226,7 +241,7 @@ func (inst *Installer) installBinary(buildNumber int, binaryPath string, onProgr
 	})
 
 	if err != nil {
-		return fmt.Errorf("failed to download: %w", err)
+		return nil, fmt.Errorf("failed to download: %w", err)
 	}
 
 	// Extract
@@ -239,18 +254,18 @@ func (inst *Installer) installBinary(buildNumber int, binaryPath string, onProgr
 
 	extractPath := filepath.Join(tmpDir, "extracted")
 	if err := inst.extractor.Extract(archivePath, extractPath); err != nil {
-		return fmt.Errorf("failed to extract: %w", err)
+		return nil, fmt.Errorf("failed to extract: %w", err)
 	}
 
 	// Copy to destination
 	if err := copyDir(extractPath, binaryPath); err != nil {
-		return fmt.Errorf("failed to copy files: %w", err)
+		return nil, fmt.Errorf("failed to copy files: %w", err)
 	}
 
 	// Add to cache
 	inst.cache.Add(*targetBuild, archivePath, extractPath)
 
-	return nil
+	return targetBuild, nil
 }
 
 // cloneServerData clones the cfx-server-data repository

@@ -97,9 +97,8 @@ func (cg *ConfigGenerator) getScriptTemplate(server *types.Server) (string, stri
 		scriptPath := filepath.Join(server.Path, "run.cmd")
 		content := fmt.Sprintf(`@echo off
 cd /d "%s"
-"%s\\FXServer.exe" +exec server.cfg
-pause
-`, server.Path, server.BinaryPath)
+bin\FXServer.exe +exec server.cfg
+`, server.Path)
 		return scriptPath, content
 	}
 
@@ -107,8 +106,8 @@ pause
 	scriptPath := filepath.Join(server.Path, "run.sh")
 	content := fmt.Sprintf(`#!/bin/bash
 cd "%s"
-bash "%s/run.sh" +exec server.cfg
-`, server.Path, server.BinaryPath)
+bash bin/run.sh +exec server.cfg
+`, server.Path)
 	return scriptPath, content
 }
 

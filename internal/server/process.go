@@ -15,11 +15,15 @@ import (
 )
 
 // ProcessManager handles server process lifecycle
-type ProcessManager struct{}
+type ProcessManager struct {
+	metadataManager *MetadataManager
+}
 
 // NewProcessManager creates a new process manager
 func NewProcessManager() *ProcessManager {
-	return &ProcessManager{}
+	return &ProcessManager{
+		metadataManager: NewMetadataManager(),
+	}
 }
 
 // Start starts a server process
@@ -28,19 +32,22 @@ func (pm *ProcessManager) Start(server *types.Server) error {
 		return fmt.Errorf("server '%s' is already running (PID: %d)", server.Name, server.PID)
 	}
 
-	// Get script path
-	scriptPath := pm.getScriptPath(server)
-
-	// Check if script exists
-	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
-		return fmt.Errorf("launch script not found: %s", scriptPath)
-	}
-
 	// Create command
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = exec.Command("cmd", "/C", scriptPath)
+		// Launch FXServer.exe directly instead of through run.cmd
+		// This allows proper process lifecycle tracking
+		exePath := filepath.Join(server.Path, "bin", "FXServer.exe")
+		if _, err := os.Stat(exePath); os.IsNotExist(err) {
+			return fmt.Errorf("FXServer.exe not found: %s", exePath)
+		}
+		cmd = exec.Command(exePath, "+exec", "server.cfg")
 	} else {
+		// On Linux, use the run.sh script
+		scriptPath := pm.getScriptPath(server)
+		if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+			return fmt.Errorf("launch script not found: %s", scriptPath)
+		}
 		cmd = exec.Command("bash", scriptPath)
 	}
 
@@ -68,14 +75,14 @@ func (pm *ProcessManager) Start(server *types.Server) error {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
 
-	// Close log file after command exits (in background)
-	go func() {
-		cmd.Wait()
-		logFile.Close()
-	}()
-
 	server.PID = cmd.Process.Pid
 	server.LastStarted = time.Now()
+
+	// Record start in metadata
+	if err := pm.metadataManager.RecordStart(server.Path); err != nil {
+		// Log warning but don't fail - server is already running
+		fmt.Fprintf(os.Stderr, "Warning: Failed to update metadata: %v\n", err)
+	}
 
 	return nil
 }
@@ -85,6 +92,9 @@ func (pm *ProcessManager) Stop(server *types.Server) error {
 	if !server.IsRunning() {
 		return fmt.Errorf("server '%s' is not running", server.Name)
 	}
+
+	// Capture start time for uptime calculation
+	startTime := server.LastStarted
 
 	proc, err := process.NewProcess(int32(server.PID))
 	if err != nil {
@@ -121,12 +131,18 @@ func (pm *ProcessManager) Stop(server *types.Server) error {
 			// Force kill if still running
 			proc.Kill()
 			server.PID = 0
+			// Record stop in metadata
+			pm.metadataManager.RecordStop(server.Path, startTime)
 			return nil
 
 		case <-ticker.C:
 			exists, _ := process.PidExists(int32(server.PID))
 			if !exists {
 				server.PID = 0
+				// Record stop in metadata
+				if err := pm.metadataManager.RecordStop(server.Path, startTime); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: Failed to update metadata: %v\n", err)
+				}
 				return nil
 			}
 		}

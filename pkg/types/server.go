@@ -1,20 +1,33 @@
 package types
 
-import "time"
+import (
+	"path/filepath"
+	"time"
+)
 
 // Server represents a FiveM server instance
 type Server struct {
 	Name        string    `json:"name"`
 	Path        string    `json:"path"`
-	BinaryPath  string    `json:"binary_path"`
-	Build       int       `json:"build"`
-	BuildHash   string    `json:"build_hash"`
+	// BinaryPath removed - now calculated as {Path}/bin
+	// Build removed - now in metadata.json
+	// BuildHash removed - now in metadata.json
 	KeyID       string    `json:"key_id"`
 	Port        int       `json:"port"`
 	Created     time.Time `json:"created"`
 	LastStarted time.Time `json:"last_started"`
 	PID         int       `json:"pid"`
 	AutoStart   bool      `json:"auto_start"`
+}
+
+// GetBinaryPath returns the path to the server's bin directory
+func (s *Server) GetBinaryPath() string {
+	return filepath.Join(s.Path, "bin")
+}
+
+// GetBinaryExecutable returns the platform-specific executable path
+func (s *Server) GetBinaryExecutable() string {
+	return filepath.Join(s.GetBinaryPath(), "FXServer.exe")
 }
 
 // IsRunning returns true if the server is currently running
