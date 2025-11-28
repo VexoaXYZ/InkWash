@@ -47,12 +47,11 @@ func (p *ProgressBar) RenderWithTier(tier ui.AnimationTier) string {
 	switch tier {
 	case ui.TierMinimal:
 		// Simple bar without shimmer
-		bar := strings.Repeat("█", filled) + strings.Repeat("░", p.Width-filled)
-		return lipgloss.NewStyle().Foreground(ui.ColorPrimary).Render(bar)
+		simpleBar := strings.Repeat("█", filled) + strings.Repeat("░", p.Width-filled)
+		return lipgloss.NewStyle().Foreground(ui.ColorPrimary).Render(simpleBar)
 
 	case ui.TierBalanced:
 		// Smooth fill without shimmer
-		bar := strings.Repeat("█", filled) + strings.Repeat("░", p.Width-filled)
 		filledPart := lipgloss.NewStyle().Foreground(ui.ColorPrimary).Render(strings.Repeat("█", filled))
 		emptyPart := lipgloss.NewStyle().Foreground(ui.ColorLightGray).Render(strings.Repeat("░", p.Width-filled))
 		return filledPart + emptyPart
