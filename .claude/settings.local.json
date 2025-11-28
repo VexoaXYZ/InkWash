@@ -9,7 +9,9 @@
       "Bash(go build:*)",
       "Bash(git init:*)",
       "Bash(git add:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(./inkwash.exe create:*)",
+      "Bash(./inkwash.exe:*)"
     ],
     "deny": [],
     "ask": []
