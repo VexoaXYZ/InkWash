@@ -11,15 +11,16 @@ import (
 
 // TextInput represents an interactive text input field
 type TextInput struct {
-	Label       string
-	Placeholder string
-	Value       string
-	MaxLength   int
-	Focused     bool
-	Error       string
-	Validator   func(string) error
-	cursor      int
-	showCursor  bool
+	Label        string
+	Placeholder  string
+	Value        string
+	MaxLength    int
+	Focused      bool
+	Error        string
+	Validator    func(string) error
+	cursor       int
+	showCursor   bool
+	clearOnFocus bool // Clear value on first keypress after focus
 }
 
 // NewTextInput creates a new text input field
@@ -42,6 +43,12 @@ func (t *TextInput) SetValidator(validator func(string) error) {
 // Focus sets the input as focused
 func (t *TextInput) Focus() {
 	t.Focused = true
+	// Move cursor to end of existing text
+	t.cursor = len(t.Value)
+	// Mark that we should clear on first keypress (for default values)
+	if t.Value != "" {
+		t.clearOnFocus = true
+	}
 }
 
 // Blur removes focus from the input
@@ -71,13 +78,23 @@ func (t *TextInput) Update(msg tea.Msg) tea.Cmd {
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyBackspace:
-			if len(t.Value) > 0 && t.cursor > 0 {
+			// Clear default value on first keypress
+			if t.clearOnFocus {
+				t.Value = ""
+				t.cursor = 0
+				t.clearOnFocus = false
+			} else if len(t.Value) > 0 && t.cursor > 0 {
 				t.Value = t.Value[:t.cursor-1] + t.Value[t.cursor:]
 				t.cursor--
 			}
 
 		case tea.KeyDelete:
-			if t.cursor < len(t.Value) {
+			// Clear default value on first keypress
+			if t.clearOnFocus {
+				t.Value = ""
+				t.cursor = 0
+				t.clearOnFocus = false
+			} else if t.cursor < len(t.Value) {
 				t.Value = t.Value[:t.cursor] + t.Value[t.cursor+1:]
 			}
 
@@ -98,12 +115,24 @@ func (t *TextInput) Update(msg tea.Msg) tea.Cmd {
 			t.cursor = len(t.Value)
 
 		case tea.KeySpace:
+			// Clear default value on first keypress
+			if t.clearOnFocus {
+				t.Value = ""
+				t.cursor = 0
+				t.clearOnFocus = false
+			}
 			if t.MaxLength == 0 || len(t.Value) < t.MaxLength {
 				t.Value = t.Value[:t.cursor] + " " + t.Value[t.cursor:]
 				t.cursor++
 			}
 
 		case tea.KeyRunes:
+			// Clear default value on first keypress
+			if t.clearOnFocus {
+				t.Value = ""
+				t.cursor = 0
+				t.clearOnFocus = false
+			}
 			if t.MaxLength == 0 || len(t.Value) < t.MaxLength {
 				t.Value = t.Value[:t.cursor] + string(msg.Runes) + t.Value[t.cursor:]
 				t.cursor += len(msg.Runes)

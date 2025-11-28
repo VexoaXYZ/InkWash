@@ -5,7 +5,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/VexoaXYZ/inkwash/internal/cache"
@@ -50,6 +52,58 @@ func NewInstaller(cache *cache.BinaryCache, registry *registry.Registry) *Instal
 	}
 }
 
+// slugifyServerName converts a server name to a safe folder name
+// Example: "Vexoa Test Server" -> "vexoa-test-server"
+func slugifyServerName(name string) string {
+	// Convert to lowercase
+	slug := strings.ToLower(name)
+
+	// Replace spaces and underscores with hyphens
+	slug = strings.ReplaceAll(slug, " ", "-")
+	slug = strings.ReplaceAll(slug, "_", "-")
+
+	// Remove any characters that aren't alphanumeric or hyphens
+	reg := regexp.MustCompile(`[^a-z0-9-]+`)
+	slug = reg.ReplaceAllString(slug, "")
+
+	// Remove multiple consecutive hyphens
+	reg = regexp.MustCompile(`-+`)
+	slug = reg.ReplaceAllString(slug, "-")
+
+	// Trim hyphens from start and end
+	slug = strings.Trim(slug, "-")
+
+	return slug
+}
+
+// ensureUniqueFolderName ensures the folder name doesn't already exist
+// If it does, appends a number to make it unique
+func ensureUniqueFolderName(basePath, folderName string) string {
+	targetPath := filepath.Join(basePath, folderName)
+
+	// If it doesn't exist, we're good
+	if _, err := os.Stat(targetPath); os.IsNotExist(err) {
+		return folderName
+	}
+
+	// Otherwise, try appending numbers until we find a unique name
+	counter := 1
+	for {
+		uniqueName := fmt.Sprintf("%s-%d", folderName, counter)
+		targetPath = filepath.Join(basePath, uniqueName)
+
+		if _, err := os.Stat(targetPath); os.IsNotExist(err) {
+			return uniqueName
+		}
+
+		counter++
+		if counter > 100 {
+			// Prevent infinite loop, use timestamp
+			return fmt.Sprintf("%s-%d", folderName, time.Now().Unix())
+		}
+	}
+}
+
 // Install installs a new FiveM server
 func (inst *Installer) Install(
 	serverName string,
@@ -73,6 +127,16 @@ func (inst *Installer) Install(
 		return err
 	}
 
+	// Convert server name to slug for folder name
+	// This ensures filesystem safety: "Vexoa Test Server" -> "vexoa-test-server"
+	folderSlug := slugifyServerName(serverName)
+	if folderSlug == "" {
+		folderSlug = "fivem-server" // Fallback for invalid names
+	}
+
+	// Ensure the folder name is unique
+	folderSlug = ensureUniqueFolderName(installPath, folderSlug)
+
 	// Step 2: Create directory structure
 	inst.reportProgress(onProgress, InstallProgress{
 		Step:           "Creating directories",
@@ -81,7 +145,7 @@ func (inst *Installer) Install(
 		CompletedSteps: 1,
 	})
 
-	serverPath := filepath.Join(installPath, serverName)
+	serverPath := filepath.Join(installPath, folderSlug)
 	binaryPath := filepath.Join(serverPath, "bin")
 
 	if err := inst.createDirectories(serverPath, binaryPath); err != nil {
@@ -275,10 +339,11 @@ func (inst *Installer) cloneServerData(serverPath string) error {
 	os.RemoveAll(tmpDir) // Clean up any previous clone
 	defer os.RemoveAll(tmpDir)
 
-	// Clone using git
-	cmd := exec.Command("git", "clone", "https://github.com/citizenfx/cfx-server-data.git", tmpDir)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	// Clone using git (suppress progress output for clean TUI)
+	cmd := exec.Command("git", "clone", "--quiet", "--depth", "1", "https://github.com/citizenfx/cfx-server-data.git", tmpDir)
+	// Suppress output to avoid breaking TUI
+	cmd.Stdout = nil
+	cmd.Stderr = nil
 
 	if err := cmd.Run(); err != nil {
 		// If git fails, create basic structure manually

@@ -101,9 +101,17 @@ func NewCreateWizard(installer *server.Installer, keyVault *cache.KeyVault, reg 
 		return nil
 	})
 
+	// Use clean absolute path to prevent concatenation issues
 	defaultPath := filepath.Join(registry.GetDefaultConfigPath(), "servers")
-	pathInput := components.NewTextInput("Installation Path", defaultPath, 255)
+	// Ensure it's absolute and clean (prevents Windows path concatenation issues)
+	if absPath, err := filepath.Abs(defaultPath); err == nil {
+		defaultPath = absPath
+	}
+	defaultPath = filepath.Clean(defaultPath)
+
+	pathInput := components.NewTextInput("Installation Path", "", 255)
 	pathInput.Value = defaultPath
+	pathInput.Placeholder = defaultPath
 
 	return &CreateWizardModel{
 		step:           StepServerName,
@@ -287,7 +295,16 @@ func (m *CreateWizardModel) handleEnter() (tea.Model, tea.Cmd) {
 
 	case StepPath:
 		m.pathInput.Blur()
-		m.installPath = m.pathInput.Value
+		// Clean the path and ensure it's absolute
+		cleanPath := filepath.Clean(m.pathInput.Value)
+		if !filepath.IsAbs(cleanPath) {
+			// If relative, make it absolute from current directory
+			absPath, err := filepath.Abs(cleanPath)
+			if err == nil {
+				cleanPath = absPath
+			}
+		}
+		m.installPath = cleanPath
 		m.step = StepConfirm
 
 	case StepConfirm:
@@ -488,24 +505,65 @@ func (m *CreateWizardModel) renderConfirmation() string {
 func (m *CreateWizardModel) renderProgress() string {
 	var b strings.Builder
 
-	b.WriteString(m.spinner.View())
-	b.WriteString(" ")
-	b.WriteString(m.installProgress.Step)
+	// Installation header
+	headerStyle := lipgloss.NewStyle().
+		Foreground(ui.ColorPureWhite).
+		Bold(true)
+
+	b.WriteString(headerStyle.Render("Installing Server"))
 	b.WriteString("\n\n")
 
+	// Current step with spinner
+	stepStyle := lipgloss.NewStyle().
+		Foreground(ui.ColorPrimary)
+
+	spinnerStyle := lipgloss.NewStyle().
+		Foreground(ui.ColorPrimary)
+
+	b.WriteString(spinnerStyle.Render(m.spinner.View()))
+	b.WriteString(" ")
+	b.WriteString(stepStyle.Render(m.installProgress.Step))
+	b.WriteString("\n\n")
+
+	// Progress bar
 	b.WriteString(m.progressBar.Render())
 	b.WriteString("\n\n")
 
+	// Progress indicator
 	progressStyle := lipgloss.NewStyle().
 		Foreground(ui.ColorMediumGray)
 
-	b.WriteString(progressStyle.Render(fmt.Sprintf("Step %d of %d",
-		m.installProgress.CompletedSteps, m.installProgress.TotalSteps)))
+	progressText := fmt.Sprintf("Step %d of %d",
+		m.installProgress.CompletedSteps, m.installProgress.TotalSteps)
 
-	if m.installProgress.CurrentFile != "" {
-		b.WriteString("\n")
-		b.WriteString(progressStyle.Render(m.installProgress.CurrentFile))
+	if m.installProgress.Progress > 0 {
+		progressText += fmt.Sprintf(" (%.0f%%)", m.installProgress.Progress*100)
 	}
+
+	b.WriteString(progressStyle.Render(progressText))
+
+	// Current file (if any)
+	if m.installProgress.CurrentFile != "" {
+		b.WriteString("\n\n")
+		fileStyle := lipgloss.NewStyle().
+			Foreground(ui.ColorMediumGray).
+			Italic(true)
+		b.WriteString(fileStyle.Render(m.installProgress.CurrentFile))
+	}
+
+	// Divider
+	b.WriteString("\n\n")
+	dividerStyle := lipgloss.NewStyle().
+		Foreground(ui.ColorMediumGray)
+	b.WriteString(dividerStyle.Render("────────────────────────────────────────"))
+	b.WriteString("\n\n")
+
+	// Help text
+	helpStyle := lipgloss.NewStyle().
+		Foreground(ui.ColorMediumGray).
+		Italic(true)
+
+	b.WriteString(helpStyle.Render("Please wait while your server is being installed..."))
 
 	return b.String()
 }
@@ -514,25 +572,72 @@ func (m *CreateWizardModel) renderProgress() string {
 func (m *CreateWizardModel) renderComplete() string {
 	var b strings.Builder
 
-	successStyle := lipgloss.NewStyle().
-		Foreground(ui.ColorSuccess).
+	// Success banner
+	successBanner := lipgloss.NewStyle().
+		Foreground(ui.ColorPureWhite).
+		Background(ui.ColorSuccess).
+		Bold(true).
+		Padding(0, 2).
+		MarginBottom(1)
+
+	b.WriteString(successBanner.Render(ui.SymbolCheck + " Installation Complete"))
+	b.WriteString("\n\n")
+
+	// Server name display
+	nameStyle := lipgloss.NewStyle().
+		Foreground(ui.ColorPrimary).
 		Bold(true)
 
-	b.WriteString(successStyle.Render(ui.SymbolCheck + " Server created successfully!"))
+	labelStyle := lipgloss.NewStyle().
+		Foreground(ui.ColorMediumGray)
+
+	b.WriteString(labelStyle.Render("Server: "))
+	b.WriteString(nameStyle.Render(m.serverName))
 	b.WriteString("\n\n")
 
-	codeStyle := lipgloss.NewStyle().
-		Foreground(ui.ColorPrimary)
+	// Divider
+	dividerStyle := lipgloss.NewStyle().
+		Foreground(ui.ColorMediumGray)
 
-	b.WriteString("Start your server:\n")
-	b.WriteString(codeStyle.Render(fmt.Sprintf("  inkwash start %s", m.serverName)))
+	b.WriteString(dividerStyle.Render("────────────────────────────────────────"))
 	b.WriteString("\n\n")
 
+	// Next steps header
+	headerStyle := lipgloss.NewStyle().
+		Foreground(ui.ColorPureWhite).
+		Bold(true)
+
+	b.WriteString(headerStyle.Render("Next Steps"))
+	b.WriteString("\n\n")
+
+	// Start command
+	commandStyle := lipgloss.NewStyle().
+		Foreground(ui.ColorSuccess).
+		Background(lipgloss.Color("#1a1a1a")).
+		Padding(0, 1)
+
+	b.WriteString(labelStyle.Render("Start your server:\n"))
+	b.WriteString(commandStyle.Render(fmt.Sprintf("inkwash start \"%s\"", m.serverName)))
+	b.WriteString("\n\n")
+
+	// Additional info
+	infoStyle := lipgloss.NewStyle().
+		Foreground(ui.ColorMediumGray).
+		Italic(true)
+
+	b.WriteString(infoStyle.Render("Your server is ready to use!"))
+	b.WriteString("\n\n")
+
+	// Divider
+	b.WriteString(dividerStyle.Render("────────────────────────────────────────"))
+	b.WriteString("\n\n")
+
+	// Exit prompt
 	helpStyle := lipgloss.NewStyle().
 		Foreground(ui.ColorMediumGray).
 		Italic(true)
 
-	b.WriteString(helpStyle.Render("Press Enter to exit"))
+	b.WriteString(helpStyle.Render("Press Enter or Esc to exit"))
 
 	return b.String()
 }
@@ -541,21 +646,39 @@ func (m *CreateWizardModel) renderComplete() string {
 func (m *CreateWizardModel) renderError() string {
 	var b strings.Builder
 
-	errorStyle := lipgloss.NewStyle().
+	// Error banner
+	errorBanner := lipgloss.NewStyle().
+		Foreground(ui.ColorPureWhite).
+		Background(ui.ColorError).
+		Bold(true).
+		Padding(0, 2).
+		MarginBottom(1)
+
+	b.WriteString(errorBanner.Render(ui.SymbolCross + " Installation Failed"))
+	b.WriteString("\n\n")
+
+	// Error message
+	errorMsgStyle := lipgloss.NewStyle().
 		Foreground(ui.ColorError).
-		Bold(true)
+		Background(lipgloss.Color("#1a1a1a")).
+		Padding(1, 2)
 
-	b.WriteString(errorStyle.Render(ui.SymbolCross + " Installation failed"))
+	b.WriteString(errorMsgStyle.Render(m.error))
 	b.WriteString("\n\n")
 
-	b.WriteString(m.error)
+	// Divider
+	dividerStyle := lipgloss.NewStyle().
+		Foreground(ui.ColorMediumGray)
+
+	b.WriteString(dividerStyle.Render("────────────────────────────────────────"))
 	b.WriteString("\n\n")
 
+	// Help text
 	helpStyle := lipgloss.NewStyle().
 		Foreground(ui.ColorMediumGray).
 		Italic(true)
 
-	b.WriteString(helpStyle.Render("Press Enter to exit"))
+	b.WriteString(helpStyle.Render("Press Enter or Esc to exit"))
 
 	return b.String()
 }
@@ -604,27 +727,42 @@ func loadKeysCmd(vault *cache.KeyVault) tea.Cmd {
 
 func installServerCmd(m *CreateWizardModel) tea.Cmd {
 	return func() tea.Msg {
-		err := m.installer.Install(
-			m.serverName,
-			m.installPath,
-			m.buildNumber,
-			m.licenseKey,
-			m.port,
-			func(progress server.InstallProgress) {
-				// This will be called from a different goroutine
-				// We need to send it back as a message
-			},
-		)
+		// Create a channel for progress updates
+		progressChan := make(chan server.InstallProgress, 10)
+		errChan := make(chan error, 1)
 
-		if err != nil {
+		// Run installation in a goroutine
+		go func() {
+			err := m.installer.Install(
+				m.serverName,
+				m.installPath,
+				m.buildNumber,
+				m.licenseKey,
+				m.port,
+				func(progress server.InstallProgress) {
+					progressChan <- progress
+				},
+			)
+			close(progressChan)
+			errChan <- err
+		}()
+
+		// Collect progress updates
+		var lastProgress server.InstallProgress
+		for progress := range progressChan {
+			lastProgress = progress
+		}
+
+		// Check for errors
+		if err := <-errChan; err != nil {
 			return installErrorMsg(fmt.Sprintf("Installation failed: %v", err))
 		}
 
 		return installProgressMsg{
 			Step:           "Complete",
 			Progress:       1.0,
-			TotalSteps:     8,
-			CompletedSteps: 8,
+			TotalSteps:     lastProgress.TotalSteps,
+			CompletedSteps: lastProgress.TotalSteps,
 		}
 	}
 }

@@ -276,11 +276,13 @@ Full dependency list in [go.mod](go.mod)
 - ✅ Real-time metrics
 - ✅ Cross-platform support
 
-### v1.1 (Planned)
+### v1.1 (In Progress)
+- ✅ Interactive creation wizard
+- [ ] GTA5Mods > Server Auto Converter powered by ZeroDream
+
+### v1.2 (Planned)
+- [ ] FiveM Vehicle Merger
 - [ ] Interactive TUI dashboard
-- [ ] Interactive creation wizard
-- [ ] Log streaming (tail -f)
-- [ ] Resource management
 - [ ] Server templates
 
 ### v2.0 (Future)
@@ -289,6 +291,8 @@ Full dependency list in [go.mod](go.mod)
 - [ ] Discord integration
 - [ ] Web dashboard
 - [ ] Multi-server orchestration
+- [ ] Resource management (start/stop/restart individual resources)
+- [ ] Log streaming/viewing
 
 ## 🤝 Contributing
 
