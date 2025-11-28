@@ -29,7 +29,7 @@ checksum:
 release:
   github:
     owner: VexoaXYZ
-    name: inkwash
+    name: InkWash
   draft: false
   prerelease: auto
 
