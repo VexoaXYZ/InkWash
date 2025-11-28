@@ -7,6 +7,8 @@ import (
 	"github.com/VexoaXYZ/inkwash/internal/cache"
 	"github.com/VexoaXYZ/inkwash/internal/registry"
 	"github.com/VexoaXYZ/inkwash/internal/server"
+	"github.com/VexoaXYZ/inkwash/internal/ui/wizard"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -21,9 +23,45 @@ Otherwise, launches interactive wizard.`,
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
-			// TODO: Launch interactive wizard
-			fmt.Println("Interactive wizard coming soon!")
-			fmt.Println("Usage: inkwash create <server-name> --build <build> --key <key-id>")
+			// Launch interactive wizard
+			cachePath := registry.GetDefaultCachePath()
+			binaryCache, err := cache.NewBinaryCache(cachePath, viper.GetInt("cache.max_builds"))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: Failed to initialize cache: %v\n", err)
+				os.Exit(1)
+			}
+
+			registryPath := registry.GetRegistryPath()
+			reg, err := registry.NewRegistry(registryPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: Failed to initialize registry: %v\n", err)
+				os.Exit(1)
+			}
+
+			vaultPath := registry.GetDefaultConfigPath() + "/keys.enc"
+			vault, err := cache.NewKeyVault(vaultPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: Failed to load key vault: %v\n", err)
+				os.Exit(1)
+			}
+
+			installer := server.NewInstaller(binaryCache, reg)
+			wizardModel := wizard.NewCreateWizard(installer, vault, reg)
+
+			p := tea.NewProgram(wizardModel, tea.WithAltScreen())
+			finalModel, err := p.Run()
+
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+
+			// Check completion
+			if wm, ok := finalModel.(*wizard.CreateWizardModel); ok {
+				if wm.Completed() {
+					fmt.Printf("\nServer '%s' is ready!\n", wm.ServerName())
+				}
+			}
 			return
 		}
 

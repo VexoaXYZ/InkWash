@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"time"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -157,6 +159,11 @@ const (
 	SpacingSmall  = 2 // Between sections
 	SpacingMedium = 3 // Between major sections
 	SpacingLarge  = 5 // Before/after critical actions
+)
+
+// Animation timing
+const (
+	CursorBlinkRate = 500 * time.Millisecond
 )
 
 // RenderTitle renders a title with the accent color
