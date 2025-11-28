@@ -68,6 +68,13 @@ func (t *TextInput) Validate() {
 	}
 }
 
+// Clear clears the input value and resets cursor
+func (t *TextInput) Clear() {
+	t.Value = ""
+	t.cursor = 0
+	t.Error = ""
+}
+
 // Update handles key input and cursor blinking
 func (t *TextInput) Update(msg tea.Msg) tea.Cmd {
 	if !t.Focused {

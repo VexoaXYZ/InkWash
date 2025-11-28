@@ -25,6 +25,7 @@ type ConvertStep int
 
 const (
 	ConvertStepSelectServer ConvertStep = iota
+	ConvertStepCustomPath
 	ConvertStepEnterURLs
 	ConvertStepConverting
 	ConvertStepDownloading
@@ -52,6 +53,7 @@ type ConvertWizardModel struct {
 	// Input components
 	serverSelector *components.Selector
 	urlInput       *components.TextInput
+	customPathInput *components.TextInput
 
 	// Progress components
 	progressBar *components.ProgressBar
@@ -59,6 +61,8 @@ type ConvertWizardModel struct {
 
 	// State
 	selectedServer *types.Server
+	externalMode   string // "current" or "custom" or "" if using registered server
+	customPath     string
 	urls           []string
 	conversions    map[string]*ConversionItem // UUID -> item
 	conversionList []string                   // Ordered UUIDs
@@ -70,6 +74,13 @@ type ConvertWizardModel struct {
 	// Progress tracking
 	overallProgress float64
 	downloadProgress map[string]float64
+	pollingActive   bool
+	lastUpdate      time.Time
+
+	// Queue management
+	conversionQueue []string // URLs waiting to be converted
+	activeConversions int    // Number of conversions in progress
+	maxConcurrent   int      // Maximum concurrent conversions
 
 	// UI state
 	width  int
@@ -80,19 +91,23 @@ type ConvertWizardModel struct {
 func NewConvertWizard(reg *registry.Registry) *ConvertWizardModel {
 	tier := ui.DetectAnimationTier()
 
-	// Create multi-line input for URLs
-	urlInput := components.NewTextInput("GTA5 Mod URLs (one per line)", "https://www.gta5-mods.com/...", 2000)
+	// Create URL input for adding URLs one at a time
+	urlInput := components.NewTextInput("Add GTA5 Mod URL", "https://www.gta5-mods.com/...", 500)
 	urlInput.SetValidator(func(s string) error {
 		if s == "" {
-			return fmt.Errorf("Please enter at least one URL")
+			return nil // Empty is okay, user might be done adding URLs
 		}
-		// Validate each line is a gta5-mods.com URL
-		lines := strings.Split(s, "\n")
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line != "" && !strings.Contains(line, "gta5-mods.com") {
-				return fmt.Errorf("All URLs must be from gta5-mods.com")
-			}
+		if !strings.Contains(s, "gta5-mods.com") {
+			return fmt.Errorf("URL must be from gta5-mods.com")
+		}
+		return nil
+	})
+
+	// Create custom path input
+	customPathInput := components.NewTextInput("Custom Resources Path", "", 255)
+	customPathInput.SetValidator(func(s string) error {
+		if s == "" {
+			return fmt.Errorf("Path cannot be empty")
 		}
 		return nil
 	})
@@ -100,13 +115,15 @@ func NewConvertWizard(reg *registry.Registry) *ConvertWizardModel {
 	return &ConvertWizardModel{
 		step:             ConvertStepSelectServer,
 		client:           convert.NewClient(),
-		downloader:       download.NewDownloader(3),
+		downloader:       download.NewDownloader(2), // Limit concurrent downloads
 		registry:         reg,
 		urlInput:         urlInput,
+		customPathInput:  customPathInput,
 		progressBar:      components.NewProgressBar(60),
 		spinner:          components.NewSpinner(tier),
 		conversions:      make(map[string]*ConversionItem),
 		downloadProgress: make(map[string]float64),
+		maxConcurrent:    2, // Only 2 conversions at a time to respect rate limits
 	}
 }
 
@@ -118,15 +135,25 @@ func (m *ConvertWizardModel) Init() tea.Cmd {
 // setupServerSelector creates the server selector
 func (m *ConvertWizardModel) setupServerSelector() tea.Cmd {
 	servers := m.registry.List()
-	if len(servers) == 0 {
-		m.error = "No servers found. Please create a server first."
-		m.step = ConvertStepError
-		return nil
+
+	// Add 2 external options + registered servers
+	items := make([]components.SelectorItem, len(servers)+2)
+
+	// External server options first
+	items[0] = components.SelectorItem{
+		Label:       "External Server (Current Directory)",
+		Description: "Download to ./resources/ in current directory",
+		Value:       "external:current",
+	}
+	items[1] = components.SelectorItem{
+		Label:       "External Server (Custom Path)",
+		Description: "Specify a custom path for resources",
+		Value:       "external:custom",
 	}
 
-	items := make([]components.SelectorItem, len(servers))
+	// Add registered servers
 	for i, srv := range servers {
-		items[i] = components.SelectorItem{
+		items[i+2] = components.SelectorItem{
 			Label:       srv.Name,
 			Description: fmt.Sprintf("Port %d • %s", srv.Port, srv.Path),
 			Value:       srv,
@@ -158,7 +185,28 @@ func (m *ConvertWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "enter":
+			// In URL input step, Enter adds current URL to list
+			if m.step == ConvertStepEnterURLs {
+				url := strings.TrimSpace(m.urlInput.Value)
+				if url != "" && m.urlInput.Error == "" {
+					// Add URL to list
+					m.urls = append(m.urls, url)
+					// Clear input for next URL
+					m.urlInput.Clear()
+					return m, nil
+				} else if url == "" && len(m.urls) > 0 {
+					// Empty input and we have URLs, proceed
+					return m.handleEnter()
+				}
+				return m, nil
+			}
 			return m.handleEnter()
+
+		case "ctrl+enter":
+			// Ctrl+Enter submits in URL input step
+			if m.step == ConvertStepEnterURLs {
+				return m.handleEnter()
+			}
 		}
 
 	case conversionStartedMsg:
@@ -168,10 +216,74 @@ func (m *ConvertWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case conversionProgressMsg:
-		if _, ok := m.conversions[string(msg)]; ok {
-			// Update status
+	case pollTickMsg:
+		// Throttle updates to prevent excessive scrolling
+		if time.Since(m.lastUpdate) < 500*time.Millisecond {
+			return m, pollTickCmd()
+		}
+		m.lastUpdate = time.Now()
+
+		// Check conversion progress
+		if m.step == ConvertStepConverting && m.pollingActive {
+			// Start new conversions from queue if under the limit
+			for len(m.conversionQueue) > 0 && m.activeConversions < m.maxConcurrent {
+				url := m.conversionQueue[0]
+				m.conversionQueue = m.conversionQueue[1:]
+				m.activeConversions++
+
+				// Start conversion in background
+				go func(u string) {
+					uuid, err := m.client.StartConversion(u)
+					if err != nil {
+						if item := m.conversions[u]; item != nil {
+							item.Error = err
+						}
+						m.activeConversions--
+						return
+					}
+
+					if item := m.conversions[u]; item != nil {
+						item.UUID = uuid
+					}
+				}(url)
+
+				// Add a small delay between conversion starts
+				time.Sleep(200 * time.Millisecond)
+			}
+
+			// Poll active conversions for progress
+			allComplete := true
+			for _, item := range m.conversions {
+				if item.Error != nil {
+					// Skip failed items
+					continue
+				}
+
+				if item.UUID != "" && (item.Status == nil || item.Status.Progress < 100) {
+					status, err := m.client.QueryProgress(item.UUID)
+					if err == nil {
+						item.Status = status
+						if status.Progress >= 100 {
+							item.FileName = status.File
+							m.activeConversions--
+						}
+					}
+				}
+
+				if item.Status == nil || item.Status.Progress < 100 {
+					allComplete = false
+				}
+			}
+
 			m.updateConversionProgress()
+
+			// Check if all done (queue empty and all conversions complete)
+			if len(m.conversionQueue) == 0 && allComplete && m.activeConversions == 0 {
+				m.pollingActive = false
+				m.step = ConvertStepDownloading
+				return m, downloadFilesCmd(m)
+			}
+			return m, pollTickCmd()
 		}
 		return m, nil
 
@@ -199,6 +311,10 @@ func (m *ConvertWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.spinner.TickCmd()
 
 	case components.CursorBlinkMsg:
+		if m.step == ConvertStepCustomPath {
+			cmd := m.customPathInput.Update(msg)
+			return m, cmd
+		}
 		if m.step == ConvertStepEnterURLs {
 			cmd := m.urlInput.Update(msg)
 			return m, cmd
@@ -212,6 +328,10 @@ func (m *ConvertWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd := m.serverSelector.Update(msg)
 			cmds = append(cmds, cmd)
 		}
+
+	case ConvertStepCustomPath:
+		cmd := m.customPathInput.Update(msg)
+		cmds = append(cmds, cmd)
 
 	case ConvertStepEnterURLs:
 		cmd := m.urlInput.Update(msg)
@@ -229,35 +349,57 @@ func (m *ConvertWizardModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.serverSelector.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
 			if m.serverSelector.Confirmed {
-				if srv, ok := m.serverSelector.SelectedValue().(types.Server); ok {
+				value := m.serverSelector.SelectedValue()
+
+				// Check if it's a registered server
+				if srv, ok := value.(types.Server); ok {
 					m.selectedServer = &srv
 					m.step = ConvertStepEnterURLs
 					m.urlInput.Focus()
 					return m, m.urlInput.BlinkCmd()
 				}
+
+				// Check if it's external server
+				if strVal, ok := value.(string); ok {
+					if strVal == "external:current" {
+						m.externalMode = "current"
+						m.step = ConvertStepEnterURLs
+						m.urlInput.Focus()
+						return m, m.urlInput.BlinkCmd()
+					} else if strVal == "external:custom" {
+						m.externalMode = "custom"
+						m.step = ConvertStepCustomPath
+						m.customPathInput.Focus()
+						return m, m.customPathInput.BlinkCmd()
+					}
+				}
 			}
 		}
 		return m, nil
 
-	case ConvertStepEnterURLs:
-		m.urlInput.Blur()
-		if m.urlInput.Error != "" {
+	case ConvertStepCustomPath:
+		m.customPathInput.Blur()
+		if m.customPathInput.Error != "" {
 			return m, nil
 		}
+		m.customPath = filepath.Clean(m.customPathInput.Value)
+		m.step = ConvertStepEnterURLs
+		m.urlInput.Focus()
+		return m, m.urlInput.BlinkCmd()
 
-		// Parse URLs
-		lines := strings.Split(m.urlInput.Value, "\n")
-		var urls []string
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line != "" {
-				urls = append(urls, line)
-			}
+	case ConvertStepEnterURLs:
+		m.urlInput.Blur()
+
+		// Check if we have any URLs
+		if len(m.urls) == 0 {
+			return m, nil // Stay on this step
 		}
-		m.urls = urls
 
-		// Initialize conversion items
-		for _, url := range urls {
+		// Initialize conversion items and queue
+		m.conversionQueue = make([]string, len(m.urls))
+		copy(m.conversionQueue, m.urls)
+
+		for _, url := range m.urls {
 			m.conversions[url] = &ConversionItem{
 				URL:      url,
 				Category: extractCategory(url),
@@ -265,9 +407,12 @@ func (m *ConvertWizardModel) handleEnter() (tea.Model, tea.Cmd) {
 		}
 
 		m.step = ConvertStepConverting
+		m.pollingActive = true
+		m.activeConversions = 0
+		m.lastUpdate = time.Now()
 		return m, tea.Batch(
-			startConversionsCmd(m),
 			m.spinner.TickCmd(),
+			pollTickCmd(),
 		)
 
 	case ConvertStepComplete, ConvertStepError:
@@ -336,8 +481,47 @@ func (m *ConvertWizardModel) View() string {
 			b.WriteString(m.serverSelector.View())
 		}
 
+	case ConvertStepCustomPath:
+		b.WriteString(m.customPathInput.View())
+		b.WriteString("\n\n")
+		helpStyle := lipgloss.NewStyle().
+			Foreground(ui.ColorMediumGray).
+			Italic(true)
+		b.WriteString(helpStyle.Render("Enter the path to your server's resources folder"))
+
 	case ConvertStepEnterURLs:
+		// Show list of added URLs
+		if len(m.urls) > 0 {
+			headerStyle := lipgloss.NewStyle().
+				Foreground(ui.ColorPureWhite).
+				Bold(true)
+
+			b.WriteString(headerStyle.Render(fmt.Sprintf("Added URLs (%d):", len(m.urls))))
+			b.WriteString("\n\n")
+
+			listStyle := lipgloss.NewStyle().
+				Foreground(ui.ColorMediumGray)
+
+			for i, url := range m.urls {
+				b.WriteString(listStyle.Render(fmt.Sprintf("  %d. %s", i+1, url)))
+				b.WriteString("\n")
+			}
+			b.WriteString("\n")
+		}
+
+		// Show input for adding more URLs
 		b.WriteString(m.urlInput.View())
+		b.WriteString("\n\n")
+
+		helpStyle := lipgloss.NewStyle().
+			Foreground(ui.ColorMediumGray).
+			Italic(true)
+
+		if len(m.urls) > 0 {
+			b.WriteString(helpStyle.Render("Enter: Add URL  •  Enter (empty): Continue  •  Ctrl+Enter: Continue"))
+		} else {
+			b.WriteString(helpStyle.Render("Enter: Add URL to list  •  Ctrl+Enter: Continue"))
+		}
 
 	case ConvertStepConverting:
 		b.WriteString(m.renderConverting())
@@ -372,37 +556,80 @@ func (m *ConvertWizardModel) renderConverting() string {
 		Foreground(ui.ColorPureWhite).
 		Bold(true)
 
-	b.WriteString(headerStyle.Render("Converting Mods"))
+	b.WriteString(headerStyle.Render(fmt.Sprintf("Converting %d Mod(s)", len(m.conversions))))
 	b.WriteString("\n\n")
 
-	// Spinner and status
-	spinnerStyle := lipgloss.NewStyle().
-		Foreground(ui.ColorPrimary)
-
-	b.WriteString(spinnerStyle.Render(m.spinner.View()))
-	b.WriteString(" Converting...")
-	b.WriteString("\n\n")
-
-	// Progress bar
-	b.WriteString(m.progressBar.Render())
-	b.WriteString("\n\n")
-
-	// Individual conversion statuses
+	// Overall progress with queue info
+	completedCount := 0
 	for _, item := range m.conversions {
-		statusStyle := lipgloss.NewStyle().
-			Foreground(ui.ColorMediumGray)
-
-		status := "Waiting..."
-		if item.Status != nil {
-			status = fmt.Sprintf("%d%% - %s", item.Status.Progress, item.Status.Message)
+		if item.Status != nil && item.Status.Progress >= 100 {
+			completedCount++
 		}
+	}
+
+	progressStyle := lipgloss.NewStyle().
+		Foreground(ui.ColorMediumGray)
+
+	b.WriteString(progressStyle.Render(fmt.Sprintf("Progress: %d/%d completed  •  %d queued  •  %d/%d active",
+		completedCount, len(m.conversions), len(m.conversionQueue), m.activeConversions, m.maxConcurrent)))
+	b.WriteString("\n\n")
+
+	// Individual mod statuses (ordered by URL list to maintain consistency)
+	i := 1
+	for _, url := range m.urls {
+		item := m.conversions[url]
+		if item == nil {
+			continue
+		}
+
+		modName := extractModName(url)
+
+		var icon, statusText string
+		var statusColor lipgloss.Color
+
 		if item.Error != nil {
-			statusStyle = statusStyle.Foreground(ui.ColorError)
-			status = fmt.Sprintf("Error: %s", item.Error)
+			icon = ui.SymbolCross
+			statusText = fmt.Sprintf("Failed: %s", item.Error)
+			statusColor = ui.ColorError
+		} else if item.Status != nil {
+			if item.Status.Progress >= 100 {
+				icon = ui.SymbolCheck
+				statusText = "Complete"
+				statusColor = ui.ColorSuccess
+			} else if item.Status.Progress > 0 {
+				icon = m.spinner.View()
+				statusText = fmt.Sprintf("%d%% - Converting", item.Status.Progress)
+				statusColor = ui.ColorPrimary
+			} else if item.UUID != "" {
+				icon = m.spinner.View()
+				statusText = "Starting conversion..."
+				statusColor = ui.ColorPrimary
+			} else {
+				icon = "⏳"
+				statusText = "Queued"
+				statusColor = ui.ColorMediumGray
+			}
+		} else if item.UUID != "" {
+			icon = m.spinner.View()
+			statusText = "Starting..."
+			statusColor = ui.ColorPrimary
+		} else {
+			icon = "⏳"
+			statusText = "Queued"
+			statusColor = ui.ColorMediumGray
 		}
 
-		b.WriteString(statusStyle.Render(fmt.Sprintf("  %s", status)))
+		nameStyle := lipgloss.NewStyle().
+			Foreground(ui.ColorPureWhite).
+			Bold(true)
+
+		statusStyle := lipgloss.NewStyle().
+			Foreground(statusColor)
+
+		b.WriteString(fmt.Sprintf("  %d. %s ", i, nameStyle.Render(modName)))
+		b.WriteString(statusStyle.Render(fmt.Sprintf("%s %s", icon, statusText)))
 		b.WriteString("\n")
+		i++
 	}
 
 	return b.String()
@@ -416,28 +643,75 @@ func (m *ConvertWizardModel) renderDownloading() string {
 		Foreground(ui.ColorPureWhite).
 		Bold(true)
 
-	b.WriteString(headerStyle.Render("Downloading Resources"))
+	b.WriteString(headerStyle.Render(fmt.Sprintf("Downloading %d Resource(s)", len(m.conversions))))
 	b.WriteString("\n\n")
 
-	// Spinner and status
-	spinnerStyle := lipgloss.NewStyle().
-		Foreground(ui.ColorPrimary)
+	// Overall progress
+	completedCount := 0
+	for _, item := range m.conversions {
+		if item.FileName != "" {
+			progress, exists := m.downloadProgress[item.FileName]
+			if exists && progress >= 1.0 {
+				completedCount++
+			}
+		}
+	}
 
-	b.WriteString(spinnerStyle.Render(m.spinner.View()))
-	b.WriteString(" Downloading...")
+	progressStyle := lipgloss.NewStyle().
+		Foreground(ui.ColorMediumGray)
+
+	b.WriteString(progressStyle.Render(fmt.Sprintf("Progress: %d/%d downloaded", completedCount, len(m.conversions))))
 	b.WriteString("\n\n")
 
-	// Progress bar
-	b.WriteString(m.progressBar.Render())
-	b.WriteString("\n\n")
+	// Individual download statuses (ordered by URL list to maintain consistency)
+	i := 1
+	for _, url := range m.urls {
+		item := m.conversions[url]
+		if item == nil {
+			continue
+		}
 
-	// Individual download statuses
-	for file, progress := range m.downloadProgress {
+		modName := extractModName(url)
+
+		var icon, statusText string
+		var statusColor lipgloss.Color
+
+		if item.Error != nil {
+			icon = ui.SymbolCross
+			statusText = "Skipped (conversion failed)"
+			statusColor = ui.ColorError
+		} else if item.FileName == "" {
+			icon = "⏳"
+			statusText = "Waiting for conversion..."
+			statusColor = ui.ColorMediumGray
+		} else {
+			progress, exists := m.downloadProgress[item.FileName]
+			if !exists {
+				icon = "⏳"
+				statusText = "Queued"
+				statusColor = ui.ColorMediumGray
+			} else if progress >= 1.0 {
+				icon = ui.SymbolCheck
+				statusText = "Complete"
+				statusColor = ui.ColorSuccess
+			} else {
+				icon = m.spinner.View()
+				statusText = fmt.Sprintf("%.0f%% - Downloading", progress*100)
+				statusColor = ui.ColorPrimary
+			}
+		}
+
+		nameStyle := lipgloss.NewStyle().
+			Foreground(ui.ColorPureWhite).
+			Bold(true)
+
 		statusStyle := lipgloss.NewStyle().
-			Foreground(ui.ColorMediumGray)
+			Foreground(statusColor)
 
-		b.WriteString(statusStyle.Render(fmt.Sprintf("  %s: %.0f%%", filepath.Base(file), progress*100)))
+		b.WriteString(fmt.Sprintf("  %d. %s ", i, nameStyle.Render(modName)))
+		b.WriteString(statusStyle.Render(fmt.Sprintf("%s %s", icon, statusText)))
 		b.WriteString("\n")
+		i++
 	}
 
 	return b.String()
@@ -466,13 +740,27 @@ func (m *ConvertWizardModel) renderComplete() string {
 	labelStyle := lipgloss.NewStyle().
 		Foreground(ui.ColorMediumGray)
 
-	b.WriteString(labelStyle.Render("Server: "))
-	b.WriteString(nameStyle.Render(m.selectedServer.Name))
-	b.WriteString("\n")
+	// Show server or external path info
+	if m.externalMode != "" {
+		var pathStr string
+		if m.externalMode == "current" {
+			currentDir, _ := os.Getwd()
+			pathStr = filepath.Join(currentDir, "resources")
+		} else {
+			pathStr = m.customPath
+		}
+		b.WriteString(labelStyle.Render("Resources Path: "))
+		b.WriteString(nameStyle.Render(pathStr))
+		b.WriteString("\n\n")
+	} else {
+		b.WriteString(labelStyle.Render("Server: "))
+		b.WriteString(nameStyle.Render(m.selectedServer.Name))
+		b.WriteString("\n")
 
-	b.WriteString(labelStyle.Render("Resources Path: "))
-	b.WriteString(nameStyle.Render(filepath.Join(m.selectedServer.Path, "resources")))
-	b.WriteString("\n\n")
+		b.WriteString(labelStyle.Render("Resources Path: "))
+		b.WriteString(nameStyle.Render(filepath.Join(m.selectedServer.Path, "resources")))
+		b.WriteString("\n\n")
+	}
 
 	// Divider
 	dividerStyle := lipgloss.NewStyle().
@@ -560,9 +848,10 @@ func (m *ConvertWizardModel) Completed() bool {
 
 type conversionStartedMsg struct {
 	uuid string
+	url  string
 }
 
-type conversionProgressMsg string // UUID
+type pollTickMsg struct{}
 
 type conversionCompleteMsg struct{}
 
@@ -577,65 +866,33 @@ type wizardErrorMsg string
 
 // Commands
 
-func startConversionsCmd(m *ConvertWizardModel) tea.Cmd {
-	return func() tea.Msg {
-		var wg sync.WaitGroup
-		errChan := make(chan error, len(m.urls))
-
-		// Start all conversions
-		for _, url := range m.urls {
-			wg.Add(1)
-			go func(u string) {
-				defer wg.Done()
-
-				uuid, err := m.client.StartConversion(u)
-				if err != nil {
-					errChan <- fmt.Errorf("failed to start conversion for %s: %w", u, err)
-					return
-				}
-
-				if item, ok := m.conversions[u]; ok {
-					item.UUID = uuid
-					m.conversionList = append(m.conversionList, uuid)
-				}
-
-				// Poll until complete
-				for {
-					status, err := m.client.QueryProgress(uuid)
-					if err != nil {
-						errChan <- fmt.Errorf("failed to query progress: %w", err)
-						return
-					}
-
-					if item, ok := m.conversions[u]; ok {
-						item.Status = status
-						if status.Progress >= 100 {
-							item.FileName = status.File
-							m.downloads = append(m.downloads, status.File)
-							break
-						}
-					}
-
-					time.Sleep(2 * time.Second)
-				}
-			}(url)
-		}
-
-		wg.Wait()
-		close(errChan)
-
-		// Check for errors
-		if len(errChan) > 0 {
-			return wizardErrorMsg(fmt.Sprintf("Conversion failed: %v", <-errChan))
-		}
-
-		return conversionCompleteMsg{}
-	}
+func pollTickCmd() tea.Cmd {
+	return tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
+		return pollTickMsg{}
+	})
 }
+
 
 func downloadFilesCmd(m *ConvertWizardModel) tea.Cmd {
 	return func() tea.Msg {
-		resourcesPath := filepath.Join(m.selectedServer.Path, "resources")
+		var resourcesPath string
+
+		// Determine resources path based on server selection
+		if m.externalMode == "current" {
+			// Current directory
+			currentDir, err := os.Getwd()
+			if err != nil {
+				return wizardErrorMsg(fmt.Sprintf("Failed to get current directory: %v", err))
+			}
+			resourcesPath = filepath.Join(currentDir, "resources")
+		} else if m.externalMode == "custom" {
+			// Custom path
+			resourcesPath = m.customPath
+		} else {
+			// Registered server
+			resourcesPath = filepath.Join(m.selectedServer.Path, "resources")
+		}
+
 		if err := os.MkdirAll(resourcesPath, 0755); err != nil {
 			return wizardErrorMsg(fmt.Sprintf("Failed to create resources directory: %v", err))
 		}
@@ -759,4 +1016,40 @@ func extractCategory(url string) string {
 		}
 	}
 	return "misc" // Default category
+}
+
+// extractModName extracts a readable mod name from a gta5-mods.com URL
+// e.g., "https://www.gta5-mods.com/vehicles/1995-mclaren-f1-lm-addon" -> "1995 McLaren F1 LM Addon"
+func extractModName(url string) string {
+	// Split URL by "/" and get the last part (slug)
+	parts := strings.Split(url, "/")
+	if len(parts) == 0 {
+		return url
+	}
+
+	slug := parts[len(parts)-1]
+
+	// Remove any query parameters
+	if idx := strings.Index(slug, "?"); idx != -1 {
+		slug = slug[:idx]
+	}
+
+	// Replace hyphens with spaces and title case
+	name := strings.ReplaceAll(slug, "-", " ")
+
+	// Simple title case: capitalize first letter of each word
+	words := strings.Fields(name)
+	for i, word := range words {
+		if len(word) > 0 {
+			words[i] = strings.ToUpper(word[:1]) + word[1:]
+		}
+	}
+	name = strings.Join(words, " ")
+
+	// Limit length for display
+	if len(name) > 50 {
+		name = name[:47] + "..."
+	}
+
+	return name
 }
