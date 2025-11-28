@@ -270,14 +270,27 @@ func (inst *Installer) installBinary(buildNumber int, binaryPath string, onProgr
 
 // cloneServerData clones the cfx-server-data repository
 func (inst *Installer) cloneServerData(serverPath string) error {
+	// Clone to temporary directory
+	tmpDir := filepath.Join(os.TempDir(), "inkwash-server-data")
+	os.RemoveAll(tmpDir) // Clean up any previous clone
+	defer os.RemoveAll(tmpDir)
+
 	// Clone using git
-	cmd := exec.Command("git", "clone", "https://github.com/citizenfx/cfx-server-data.git", serverPath)
+	cmd := exec.Command("git", "clone", "https://github.com/citizenfx/cfx-server-data.git", tmpDir)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
 		// If git fails, create basic structure manually
 		return inst.createBasicStructure(serverPath)
+	}
+
+	// Copy resources folder from cloned repo
+	srcResources := filepath.Join(tmpDir, "resources")
+	dstResources := filepath.Join(serverPath, "resources")
+
+	if err := copyDir(srcResources, dstResources); err != nil {
+		return fmt.Errorf("failed to copy resources: %w", err)
 	}
 
 	return nil
