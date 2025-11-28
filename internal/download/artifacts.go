@@ -75,13 +75,19 @@ func (ac *ArtifactClient) parseBuilds(doc *goquery.Document) ([]types.Build, err
 	doc.Find("a").Each(func(i int, s *goquery.Selection) {
 		href := s.AttrOr("href", "")
 
-		// Skip non-build links
-		if !strings.Contains(href, "-") {
+		// Look for build archive links: ./BUILD-HASH/server.7z or ./BUILD-HASH/fx.tar.xz
+		if !strings.Contains(href, "/server.7z") && !strings.Contains(href, "/fx.tar.xz") {
 			return
 		}
 
-		// Parse: "22934-1c490ee35560b652c97a4bfd5a5852cb9f033284/"
-		parts := strings.Split(strings.TrimSuffix(href, "/"), "-")
+		// Extract directory part: "./22934-1c490ee35560b652c97a4bfd5a5852cb9f033284/server.7z"
+		// Remove "./" prefix and "/server.7z" or "/fx.tar.xz" suffix
+		href = strings.TrimPrefix(href, "./")
+		href = strings.TrimSuffix(href, "/server.7z")
+		href = strings.TrimSuffix(href, "/fx.tar.xz")
+
+		// Parse: "22934-1c490ee35560b652c97a4bfd5a5852cb9f033284"
+		parts := strings.SplitN(href, "-", 2)
 		if len(parts) < 2 {
 			return
 		}

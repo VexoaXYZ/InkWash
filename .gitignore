@@ -40,3 +40,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Test servers
+test-servers/
