@@ -248,9 +248,9 @@ func (m *CreateWizardModel) handleEnter() (tea.Model, tea.Cmd) {
 					m.spinner.TickCmd(),
 				)
 			}
-		} else if m.buildSelector != nil {
-			m.buildSelector.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		}
+		// Let the normal update flow handle the Enter key
+		return m, nil
 
 	case StepLicenseKey:
 		if m.keySelector != nil && m.keySelector.Confirmed {
@@ -260,9 +260,9 @@ func (m *CreateWizardModel) handleEnter() (tea.Model, tea.Cmd) {
 				m.portInput.Focus()
 				return m, m.portInput.BlinkCmd()
 			}
-		} else if m.keySelector != nil {
-			m.keySelector.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		}
+		// Let the normal update flow handle the Enter key
+		return m, nil
 
 	case StepPort:
 		m.portInput.Blur()
