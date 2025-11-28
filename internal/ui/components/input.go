@@ -97,6 +97,12 @@ func (t *TextInput) Update(msg tea.Msg) tea.Cmd {
 		case tea.KeyEnd:
 			t.cursor = len(t.Value)
 
+		case tea.KeySpace:
+			if t.MaxLength == 0 || len(t.Value) < t.MaxLength {
+				t.Value = t.Value[:t.cursor] + " " + t.Value[t.cursor:]
+				t.cursor++
+			}
+
 		case tea.KeyRunes:
 			if t.MaxLength == 0 || len(t.Value) < t.MaxLength {
 				t.Value = t.Value[:t.cursor] + string(msg.Runes) + t.Value[t.cursor:]

@@ -77,7 +77,7 @@ func NewCreateWizard(installer *server.Installer, keyVault *cache.KeyVault, reg 
 	tier := ui.DetectAnimationTier()
 
 	// Create input components
-	nameInput := components.NewTextInput("Server Name", "my-fivem-server", 50)
+	nameInput := components.NewTextInput("Server Name", "My FiveM Server", 50)
 	nameInput.SetValidator(func(s string) error {
 		if s == "" {
 			return fmt.Errorf("Server name cannot be empty")
