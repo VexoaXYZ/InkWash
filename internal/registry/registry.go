@@ -88,14 +88,32 @@ func (r *Registry) Get(name string) (*types.Server, error) {
 	return nil, fmt.Errorf("server '%s' not found", name)
 }
 
-// List returns all servers
+// List returns all servers with valid paths (auto-removes invalid ones)
 func (r *Registry) List() []types.Server {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var validServers []types.Server
+	needsSave := false
+
+	for _, server := range r.data.Servers {
+		// Check if server path exists
+		if _, err := os.Stat(server.Path); os.IsNotExist(err) {
+			needsSave = true
+			continue
+		}
+		validServers = append(validServers, server)
+	}
+
+	// Auto-remove invalid servers from registry
+	if needsSave {
+		r.data.Servers = validServers
+		r.save()
+	}
 
 	// Return a copy to prevent external modifications
-	servers := make([]types.Server, len(r.data.Servers))
-	copy(servers, r.data.Servers)
+	servers := make([]types.Server, len(validServers))
+	copy(servers, validServers)
 	return servers
 }
 
