@@ -43,3 +43,6 @@ Thumbs.db
 
 # Test servers
 test-servers/
+test-servers/
+.github/
+.claude/
