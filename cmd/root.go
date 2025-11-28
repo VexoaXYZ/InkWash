@@ -13,16 +13,37 @@ var cfgFile string
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "inkwash",
-	Short: "Premium FiveM server manager",
-	Long: `Inkwash - A world-class CLI tool for managing FiveM servers.
+	Short: "Professional FiveM server manager",
+	Long: `InkWash - A professional CLI tool for creating and managing FiveM servers.
 
-Inkwash brings the polish of modern web applications to terminal interfaces.
-Create, manage, and monitor FiveM servers with beautiful animations and
-real-time metrics.`,
+Features:
+  • Interactive server creation wizard
+  • Multi-server management
+  • GTA5 mod converter (gta5-mods.com to FiveM)
+  • Encrypted license key storage
+  • Automated FiveM downloads and installation
+
+Commands:
+  create    Create a new FiveM server (interactive wizard)
+  start     Start a server
+  stop      Stop a server
+  list      List all servers
+  logs      View server logs
+  info      Show server information
+  convert   Convert GTA5 mods to FiveM resources
+  key       Manage FiveM license keys (add/list/remove)
+  migrate   Migrate from older versions
+
+Get started:
+  inkwash create              Create your first server
+  inkwash key add             Add a FiveM license key
+  inkwash convert             Convert GTA5 mods
+
+Documentation: https://github.com/VexoaXYZ/InkWash/wiki
+Get License Key: https://portal.cfx.re/servers/registration-keys`,
 	// If no subcommand is provided, launch the interactive dashboard
 	Run: func(cmd *cobra.Command, args []string) {
-		// TODO: Launch interactive dashboard
-		fmt.Println("Inkwash dashboard coming soon...")
+		cmd.Help()
 	},
 }
 

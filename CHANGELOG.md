@@ -1,4 +1,4 @@
-# 📋 Changelog
+# Changelog
 
 All notable changes to InkWash will be documented in this file.
 
@@ -7,7 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.0.0] - 2025-01-XX (Coming Soon!)
+## [2.0.1] - 2025-11-28
+
+### Fixed
+- Updated help command to include all available commands
+  - Added `convert` command documentation
+  - Added `key` command documentation
+  - Added quick start examples
+  - Added link to portal.cfx.re for license keys
+- Fixed PowerShell installer asset detection
+  - Now supports GoReleaser naming convention (underscores)
+  - Better error messages when asset not found
+- Fixed bash installer
+  - Support for both tar.gz and zip formats
+  - Better platform detection
+
+### Changed
+- Removed excessive emojis from installers and scripts
+- Updated all documentation to use portal.cfx.re instead of keymaster.fivem.net
+- Improved help text to be more professional and informative
+
+---
+
+## [2.0.0] - 2025-11-28
 
 ### 🎉 Complete Rewrite
 
