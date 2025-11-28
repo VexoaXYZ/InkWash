@@ -7,6 +7,7 @@ import (
 	"github.com/VexoaXYZ/inkwash/internal/cache"
 	"github.com/VexoaXYZ/inkwash/internal/registry"
 	"github.com/VexoaXYZ/inkwash/internal/ui"
+	"github.com/VexoaXYZ/inkwash/internal/validation"
 	"github.com/spf13/cobra"
 )
 
@@ -45,7 +46,14 @@ var keyAddCmd = &cobra.Command{
 		// Add key
 		id, err := vault.Add(label, key)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: Failed to add key: %v\n", err)
+			if valErr, ok := err.(*validation.ValidationError); ok {
+				fmt.Fprintf(os.Stderr, "%s\n", ui.RenderError(valErr.Message))
+				if valErr.Hint != "" {
+					fmt.Fprintf(os.Stderr, "  %s\n", ui.RenderMuted(valErr.Hint))
+				}
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			}
 			os.Exit(1)
 		}
 
@@ -81,7 +89,7 @@ var keyListCmd = &cobra.Command{
 		for _, key := range keys {
 			fmt.Printf("  %s\n", ui.RenderAccent(key.Label))
 			fmt.Printf("    ID:  %s\n", ui.RenderMuted(key.ID))
-			fmt.Printf("    Key: %s\n", ui.RenderMuted(cache.MaskKey(key.Key)))
+			fmt.Printf("    Key: %s\n", ui.RenderMuted(validation.MaskKey(key.Key)))
 			fmt.Printf("    Created: %s\n\n", ui.RenderMuted(key.Created.Format("Jan 2, 2006")))
 		}
 

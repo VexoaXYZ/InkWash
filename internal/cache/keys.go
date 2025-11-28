@@ -10,9 +10,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
+	"github.com/VexoaXYZ/inkwash/internal/validation"
 	"github.com/google/uuid"
 )
 
@@ -52,9 +52,9 @@ func NewKeyVault(filePath string) (*KeyVault, error) {
 
 // Add adds a new license key
 func (kv *KeyVault) Add(label, key string) (string, error) {
-	// Validate key format (should start with cfxk_)
-	if len(key) < 10 || key[:5] != "cfxk_" {
-		return "", fmt.Errorf("invalid license key format")
+	// Use new validation
+	if err := validation.ValidateLicenseKey(key); err != nil {
+		return "", err
 	}
 
 	// Check if key already exists
@@ -113,16 +113,6 @@ func (kv *KeyVault) List() []LicenseKey {
 // Count returns the number of stored keys
 func (kv *KeyVault) Count() int {
 	return len(kv.keys)
-}
-
-// MaskKey returns a masked version of a key for display
-func MaskKey(key string) string {
-	if len(key) < 15 {
-		return "****"
-	}
-
-	// Show first 5 chars (cfxk_) and last 4 chars
-	return key[:5] + strings.Repeat("*", len(key)-9) + key[len(key)-4:]
 }
 
 // load loads the vault from disk (encrypted)
