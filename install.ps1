@@ -69,11 +69,31 @@ try {
 Write-Host ""
 Write-Host "Extracting files..." -ForegroundColor Yellow
 try {
-    Expand-Archive -Path $zipPath -DestinationPath $InstallDir -Force
+    $tempExtract = Join-Path $env:TEMP "inkwash-extract-$([guid]::NewGuid().ToString('N'))"
+    Expand-Archive -Path $zipPath -DestinationPath $tempExtract -Force
     Remove-Item $zipPath
+
+    # Handle both flat archives and nested directory structures from GoReleaser
+    $exePath = Get-ChildItem -Path $tempExtract -Filter "inkwash.exe" -Recurse | Select-Object -First 1
+    if (-not $exePath) {
+        Write-Host "ERROR: inkwash.exe not found in archive" -ForegroundColor Red
+        Remove-Item -Path $tempExtract -Recurse -Force
+        exit 1
+    }
+
+    # Move binary to install directory
+    Copy-Item -Path $exePath.FullName -Destination (Join-Path $InstallDir "inkwash.exe") -Force
+
+    # Copy additional files (README, LICENSE) if they exist
+    Get-ChildItem -Path $tempExtract -Recurse -Include "README.md","LICENSE" | ForEach-Object {
+        Copy-Item -Path $_.FullName -Destination $InstallDir -Force
+    }
+
+    Remove-Item -Path $tempExtract -Recurse -Force
     Write-Host "Extracted successfully!" -ForegroundColor Green
 } catch {
     Write-Host "ERROR: Extraction failed: $_" -ForegroundColor Red
+    if (Test-Path $tempExtract) { Remove-Item -Path $tempExtract -Recurse -Force }
     exit 1
 }
 
