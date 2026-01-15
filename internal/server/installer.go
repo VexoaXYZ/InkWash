@@ -321,8 +321,11 @@ func (inst *Installer) installBinary(buildNumber int, binaryPath string, onProgr
 		return nil, fmt.Errorf("failed to extract: %w", err)
 	}
 
+	// Find the actual binary directory (may be nested like alpine/)
+	sourcePath := findBinaryDir(extractPath)
+
 	// Copy to destination
-	if err := copyDir(extractPath, binaryPath); err != nil {
+	if err := copyDirSkipBrokenSymlinks(sourcePath, binaryPath); err != nil {
 		return nil, fmt.Errorf("failed to copy files: %w", err)
 	}
 
@@ -459,4 +462,75 @@ func copyFile(src, dst string) error {
 // GetPlatform returns the current platform
 func GetPlatform() string {
 	return runtime.GOOS
+}
+
+// findBinaryDir finds the actual binary directory within an extracted archive
+// Some archives (like Linux FXServer) have a nested directory structure (e.g., alpine/)
+func findBinaryDir(extractPath string) string {
+	entries, err := os.ReadDir(extractPath)
+	if err != nil {
+		return extractPath
+	}
+
+	// If there's only one directory entry and no files, use that directory
+	if len(entries) == 1 && entries[0].IsDir() {
+		nestedPath := filepath.Join(extractPath, entries[0].Name())
+		// Verify it contains actual files (not just another single directory)
+		nestedEntries, err := os.ReadDir(nestedPath)
+		if err == nil && len(nestedEntries) > 1 {
+			return nestedPath
+		}
+	}
+
+	return extractPath
+}
+
+// copyDirSkipBrokenSymlinks copies a directory, skipping broken symlinks
+func copyDirSkipBrokenSymlinks(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			// Skip files we can't access
+			return nil
+		}
+
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+
+		dstPath := filepath.Join(dst, relPath)
+
+		// Handle symlinks
+		if info.Mode()&os.ModeSymlink != 0 {
+			linkTarget, err := os.Readlink(path)
+			if err != nil {
+				// Skip broken symlinks
+				return nil
+			}
+
+			// Check if the symlink target exists
+			var targetPath string
+			if filepath.IsAbs(linkTarget) {
+				targetPath = linkTarget
+			} else {
+				targetPath = filepath.Join(filepath.Dir(path), linkTarget)
+			}
+
+			if _, err := os.Stat(targetPath); os.IsNotExist(err) {
+				// Skip broken symlinks (target doesn't exist)
+				return nil
+			}
+
+			// Create the symlink
+			os.MkdirAll(filepath.Dir(dstPath), 0755)
+			os.Remove(dstPath) // Remove if exists
+			return os.Symlink(linkTarget, dstPath)
+		}
+
+		if info.IsDir() {
+			return os.MkdirAll(dstPath, info.Mode())
+		}
+
+		return copyFile(path, dstPath)
+	})
 }
