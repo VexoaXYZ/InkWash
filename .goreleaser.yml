@@ -1,3 +1,5 @@
+version: 2
+
 project_name: inkwash
 
 builds:
@@ -15,11 +17,13 @@ builds:
     main: .
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     wrap_in_directory: false
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
     files:
       - README.md
       - LICENSE
@@ -29,7 +33,7 @@ checksum:
 
 release:
   github:
-    owner: VexoaXYZ
+    owner: CFX-Software
     name: InkWash
   draft: false
   prerelease: auto
