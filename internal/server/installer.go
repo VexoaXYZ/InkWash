@@ -486,26 +486,39 @@ func findBinaryDir(extractPath string) string {
 }
 
 // copyDirSkipBrokenSymlinks copies a directory, skipping broken symlinks
+// Uses os.Lstat to properly detect symlinks without following them
 func copyDirSkipBrokenSymlinks(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			// Skip files we can't access
-			return nil
-		}
+	return copyDirRecursive(src, dst, src)
+}
 
-		relPath, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
+func copyDirRecursive(baseSrc, baseDst, currentSrc string) error {
+	entries, err := os.ReadDir(currentSrc)
+	if err != nil {
+		return fmt.Errorf("failed to read directory %s: %w", currentSrc, err)
+	}
 
-		dstPath := filepath.Join(dst, relPath)
+	for _, entry := range entries {
+		srcPath := filepath.Join(currentSrc, entry.Name())
+
+		relPath, err := filepath.Rel(baseSrc, srcPath)
+		if err != nil {
+			continue
+		}
+		dstPath := filepath.Join(baseDst, relPath)
+
+		// Use Lstat to get info without following symlinks
+		info, err := os.Lstat(srcPath)
+		if err != nil {
+			// Skip files we can't stat
+			continue
+		}
 
 		// Handle symlinks
 		if info.Mode()&os.ModeSymlink != 0 {
-			linkTarget, err := os.Readlink(path)
+			linkTarget, err := os.Readlink(srcPath)
 			if err != nil {
-				// Skip broken symlinks
-				return nil
+				// Skip unreadable symlinks
+				continue
 			}
 
 			// Check if the symlink target exists
@@ -513,24 +526,45 @@ func copyDirSkipBrokenSymlinks(src, dst string) error {
 			if filepath.IsAbs(linkTarget) {
 				targetPath = linkTarget
 			} else {
-				targetPath = filepath.Join(filepath.Dir(path), linkTarget)
+				targetPath = filepath.Join(filepath.Dir(srcPath), linkTarget)
 			}
 
 			if _, err := os.Stat(targetPath); os.IsNotExist(err) {
 				// Skip broken symlinks (target doesn't exist)
-				return nil
+				continue
 			}
 
 			// Create the symlink
-			os.MkdirAll(filepath.Dir(dstPath), 0755)
+			if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
+				continue
+			}
 			os.Remove(dstPath) // Remove if exists
-			return os.Symlink(linkTarget, dstPath)
+			if err := os.Symlink(linkTarget, dstPath); err != nil {
+				continue
+			}
+			continue
 		}
 
+		// Handle directories
 		if info.IsDir() {
-			return os.MkdirAll(dstPath, info.Mode())
+			if err := os.MkdirAll(dstPath, 0755); err != nil {
+				return fmt.Errorf("failed to create directory %s: %w", dstPath, err)
+			}
+			// Recurse into directory
+			if err := copyDirRecursive(baseSrc, baseDst, srcPath); err != nil {
+				return err
+			}
+			continue
 		}
 
-		return copyFile(path, dstPath)
-	})
+		// Handle regular files
+		if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
+			return fmt.Errorf("failed to create parent directory for %s: %w", dstPath, err)
+		}
+		if err := copyFile(srcPath, dstPath); err != nil {
+			return fmt.Errorf("failed to copy file %s: %w", srcPath, err)
+		}
+	}
+
+	return nil
 }
