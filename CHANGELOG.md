@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.3] - 2026-01-15
+
+### Fixed
+- Fixed Linux server creation failing with "no content-length header" error
+  - Linux FiveM artifact server doesn't return Content-Length on HEAD requests
+  - Added fallback to GET request with Range header to determine file size
+  - Added streaming download mode when file size cannot be determined
+  - Windows server creation continues to work as before
+
+---
+
 ## [2.0.1] - 2025-11-28
 
 ### Fixed
