@@ -70,6 +70,10 @@ type CreateWizardModel struct {
 	loadingKeys   bool
 	width         int
 	height        int
+
+	// Installation channels
+	installProgressChan <-chan server.InstallProgress
+	installErrChan      <-chan error
 }
 
 // NewCreateWizard creates a new creation wizard
@@ -166,13 +170,24 @@ func (m *CreateWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loadingKeys = false
 		return m.setupKeySelector(), nil
 
+	case installStartMsg:
+		// Store channels and start polling for progress
+		m.installProgressChan = msg.progressChan
+		m.installErrChan = msg.errChan
+		return m, waitForProgressCmd(m.installProgressChan, m.installErrChan)
+
 	case installProgressMsg:
 		m.installProgress = server.InstallProgress(msg)
 		if m.installProgress.Progress >= 1.0 {
 			m.step = StepComplete
 			m.completed = true
+			return m, nil
 		}
 		m.progressBar.SetProgress(m.installProgress.Progress)
+		// Continue polling for more progress
+		if m.installProgressChan != nil {
+			return m, waitForProgressCmd(m.installProgressChan, m.installErrChan)
+		}
 		return m, nil
 
 	case installErrorMsg:
@@ -707,6 +722,11 @@ type installProgressMsg server.InstallProgress
 
 type installErrorMsg string
 
+type installStartMsg struct {
+	progressChan <-chan server.InstallProgress
+	errChan      <-chan error
+}
+
 // Commands
 
 func loadBuildsCmd(client *download.ArtifactClient) tea.Cmd {
@@ -727,7 +747,7 @@ func loadKeysCmd(vault *cache.KeyVault) tea.Cmd {
 
 func installServerCmd(m *CreateWizardModel) tea.Cmd {
 	return func() tea.Msg {
-		// Create a channel for progress updates
+		// Create channels for progress updates
 		progressChan := make(chan server.InstallProgress, 10)
 		errChan := make(chan error, 1)
 
@@ -740,29 +760,55 @@ func installServerCmd(m *CreateWizardModel) tea.Cmd {
 				m.licenseKey,
 				m.port,
 				func(progress server.InstallProgress) {
-					progressChan <- progress
+					select {
+					case progressChan <- progress:
+					default:
+						// Drop if channel full
+					}
 				},
 			)
-			close(progressChan)
 			errChan <- err
+			close(errChan)
+			close(progressChan)
 		}()
 
-		// Collect progress updates
-		var lastProgress server.InstallProgress
-		for progress := range progressChan {
-			lastProgress = progress
+		// Return immediately with the channels
+		return installStartMsg{
+			progressChan: progressChan,
+			errChan:      errChan,
 		}
+	}
+}
 
-		// Check for errors
-		if err := <-errChan; err != nil {
-			return installErrorMsg(fmt.Sprintf("Installation failed: %v", err))
-		}
-
-		return installProgressMsg{
-			Step:           "Complete",
-			Progress:       1.0,
-			TotalSteps:     lastProgress.TotalSteps,
-			CompletedSteps: lastProgress.TotalSteps,
+// waitForProgressCmd polls the progress channel
+func waitForProgressCmd(progressChan <-chan server.InstallProgress, errChan <-chan error) tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case progress, ok := <-progressChan:
+			if ok {
+				return installProgressMsg(progress)
+			}
+			// Channel closed, check for error
+			if err := <-errChan; err != nil {
+				return installErrorMsg(fmt.Sprintf("Installation failed: %v", err))
+			}
+			// Success
+			return installProgressMsg(server.InstallProgress{
+				Step:           "Complete",
+				Progress:       1.0,
+				TotalSteps:     8,
+				CompletedSteps: 8,
+			})
+		case err := <-errChan:
+			if err != nil {
+				return installErrorMsg(fmt.Sprintf("Installation failed: %v", err))
+			}
+			return installProgressMsg(server.InstallProgress{
+				Step:           "Complete",
+				Progress:       1.0,
+				TotalSteps:     8,
+				CompletedSteps: 8,
+			})
 		}
 	}
 }
