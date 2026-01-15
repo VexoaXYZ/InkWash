@@ -56,6 +56,11 @@ func (d *Downloader) Download(url, destPath string, onProgress ProgressCallback)
 		return err
 	}
 
+	// If size is unknown, use streaming download
+	if totalSize == 0 {
+		return d.downloadStreaming(url, destPath, onProgress)
+	}
+
 	// Check if server supports range requests
 	supportsRanges, err := d.supportsRangeRequests(url)
 	if err != nil {
@@ -342,29 +347,169 @@ func (d *Downloader) downloadSingle(url, destPath string, totalSize int64, onPro
 	return nil
 }
 
-// getFileSize gets the file size from a URL
-func (d *Downloader) getFileSize(url string) (int64, error) {
-	resp, err := d.httpClient.Head(url)
+// downloadStreaming downloads a file without knowing the total size
+// This is used when the server doesn't provide Content-Length headers
+func (d *Downloader) downloadStreaming(url, destPath string, onProgress ProgressCallback) error {
+	resp, err := d.httpClient.Get(url)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get file size: %w", err)
+		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
+	file, err := os.Create(destPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// Try to get size from response headers (some servers return it on GET but not HEAD)
+	var totalSize int64
 	contentLength := resp.Header.Get("Content-Length")
-	if contentLength == "" {
-		return 0, fmt.Errorf("no content-length header")
+	if contentLength != "" {
+		fmt.Sscanf(contentLength, "%d", &totalSize)
 	}
 
-	var size int64
-	if _, err := fmt.Sscanf(contentLength, "%d", &size); err != nil {
-		return 0, fmt.Errorf("failed to parse content-length: %w", err)
+	// Download with progress tracking
+	progress := Progress{
+		TotalBytes:    totalSize, // May be 0 if unknown
+		ChunkProgress: []int64{0},
 	}
 
-	return size, nil
+	buffer := make([]byte, 32*1024)
+	startTime := time.Now()
+	lastUpdate := startTime
+
+	for {
+		n, err := resp.Body.Read(buffer)
+		if n > 0 {
+			if _, writeErr := file.Write(buffer[:n]); writeErr != nil {
+				return writeErr
+			}
+
+			progress.ChunkProgress[0] += int64(n)
+			progress.DownloadedBytes = progress.ChunkProgress[0]
+
+			// Update totalSize if we got it from Content-Length after starting download
+			if progress.TotalBytes == 0 && totalSize > 0 {
+				progress.TotalBytes = totalSize
+			}
+
+			// Report progress every 100ms
+			if time.Since(lastUpdate) >= 100*time.Millisecond {
+				elapsed := time.Since(startTime).Seconds()
+				if elapsed > 0 {
+					progress.Speed = float64(progress.DownloadedBytes) / elapsed / 1024 / 1024
+				}
+
+				// Only calculate ETA if we know the total size
+				if progress.TotalBytes > 0 && progress.Speed > 0 {
+					remaining := float64(progress.TotalBytes - progress.DownloadedBytes)
+					etaSeconds := remaining / (progress.Speed * 1024 * 1024)
+					progress.ETA = time.Duration(etaSeconds) * time.Second
+				}
+
+				if onProgress != nil {
+					onProgress(progress)
+				}
+
+				lastUpdate = time.Now()
+			}
+		}
+
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	// Send final progress update
+	if onProgress != nil {
+		elapsed := time.Since(startTime).Seconds()
+		if elapsed > 0 {
+			progress.Speed = float64(progress.DownloadedBytes) / elapsed / 1024 / 1024
+		}
+		progress.TotalBytes = progress.DownloadedBytes // Set total to actual downloaded
+		progress.ETA = 0
+		onProgress(progress)
+	}
+
+	return nil
+}
+
+// getFileSize gets the file size from a URL
+// Returns (size, nil) on success, (0, nil) if size cannot be determined (caller should use streaming),
+// or (0, error) on actual errors
+func (d *Downloader) getFileSize(url string) (int64, error) {
+	// First try HEAD request
+	resp, err := d.httpClient.Head(url)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get file size: %w", err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		contentLength := resp.Header.Get("Content-Length")
+		if contentLength != "" {
+			var size int64
+			if _, err := fmt.Sscanf(contentLength, "%d", &size); err == nil && size > 0 {
+				return size, nil
+			}
+		}
+	}
+
+	// HEAD didn't work, try a GET request with Range header to get Content-Range
+	// This works on some servers that don't support HEAD properly
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return 0, nil // Cannot determine size, use streaming
+	}
+	req.Header.Set("Range", "bytes=0-0")
+
+	resp, err = d.httpClient.Do(req)
+	if err != nil {
+		return 0, nil // Cannot determine size, use streaming
+	}
+	defer resp.Body.Close()
+
+	// Check Content-Range header (format: "bytes 0-0/TOTAL_SIZE")
+	if resp.StatusCode == http.StatusPartialContent {
+		contentRange := resp.Header.Get("Content-Range")
+		if contentRange != "" {
+			// Parse "bytes 0-0/12345678"
+			var start, end, total int64
+			if _, err := fmt.Sscanf(contentRange, "bytes %d-%d/%d", &start, &end, &total); err == nil && total > 0 {
+				return total, nil
+			}
+		}
+	}
+
+	// Also check Content-Length on the response (some servers return it on GET but not HEAD)
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent {
+		contentLength := resp.Header.Get("Content-Length")
+		if contentLength != "" {
+			var size int64
+			if _, err := fmt.Sscanf(contentLength, "%d", &size); err == nil && size > 0 {
+				// If we got a partial response, we need to get the real size differently
+				// Check if there's a Content-Range header
+				contentRange := resp.Header.Get("Content-Range")
+				if contentRange != "" {
+					var start, end, total int64
+					if _, err := fmt.Sscanf(contentRange, "bytes %d-%d/%d", &start, &end, &total); err == nil && total > 0 {
+						return total, nil
+					}
+				}
+			}
+		}
+	}
+
+	// Cannot determine size, return 0 to indicate streaming download should be used
+	return 0, nil
 }
 
 // supportsRangeRequests checks if the server supports range requests
