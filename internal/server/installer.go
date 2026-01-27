@@ -335,28 +335,99 @@ func (inst *Installer) installBinary(buildNumber int, binaryPath string, onProgr
 	return targetBuild, nil
 }
 
-// cloneServerData clones the cfx-server-data repository
+// cloneServerData clones the cfx-server-data repository or downloads it as ZIP if git is unavailable
 func (inst *Installer) cloneServerData(serverPath string) error {
 	// Clone to temporary directory
 	tmpDir := filepath.Join(os.TempDir(), "inkwash-server-data")
 	os.RemoveAll(tmpDir) // Clean up any previous clone
 	defer os.RemoveAll(tmpDir)
 
-	// Clone using git (suppress progress output for clean TUI)
-	cmd := exec.Command("git", "clone", "--quiet", "--depth", "1", "https://github.com/citizenfx/cfx-server-data.git", tmpDir)
-	// Suppress output to avoid breaking TUI
+	// Check if git is available and try to clone
+	if inst.isGitAvailable() {
+		// Clone using git (suppress progress output for clean TUI)
+		cmd := exec.Command("git", "clone", "--quiet", "--depth", "1", "https://github.com/citizenfx/cfx-server-data.git", tmpDir)
+		// Suppress output to avoid breaking TUI
+		cmd.Stdout = nil
+		cmd.Stderr = nil
+
+		if err := cmd.Run(); err == nil {
+			// Git clone succeeded, copy resources
+			srcResources := filepath.Join(tmpDir, "resources")
+			dstResources := filepath.Join(serverPath, "resources")
+
+			if err := copyDir(srcResources, dstResources); err != nil {
+				return fmt.Errorf("failed to copy resources: %w", err)
+			}
+			return nil
+		}
+		// Git clone failed, fall through to ZIP download
+	}
+
+	// Git not available or clone failed - download as ZIP from GitHub
+	return inst.downloadServerDataZip(serverPath, tmpDir)
+}
+
+// isGitAvailable checks if git is installed and accessible
+func (inst *Installer) isGitAvailable() bool {
+	cmd := exec.Command("git", "--version")
 	cmd.Stdout = nil
 	cmd.Stderr = nil
+	return cmd.Run() == nil
+}
 
-	if err := cmd.Run(); err != nil {
-		// If git fails, create basic structure manually
+// downloadServerDataZip downloads cfx-server-data as a ZIP archive from GitHub
+func (inst *Installer) downloadServerDataZip(serverPath, tmpDir string) error {
+	// GitHub provides ZIP archives at this URL pattern
+	zipURL := "https://github.com/citizenfx/cfx-server-data/archive/refs/heads/master.zip"
+	zipPath := filepath.Join(tmpDir, "server-data.zip")
+
+	// Ensure temp directory exists
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		return fmt.Errorf("failed to create temp directory: %w", err)
+	}
+
+	// Download the ZIP file
+	if err := inst.downloader.Download(zipURL, zipPath, nil); err != nil {
+		// If download fails, fall back to basic structure
 		return inst.createBasicStructure(serverPath)
 	}
 
-	// Copy resources folder from cloned repo
-	srcResources := filepath.Join(tmpDir, "resources")
-	dstResources := filepath.Join(serverPath, "resources")
+	// Extract the ZIP file
+	extractPath := filepath.Join(tmpDir, "extracted")
+	if err := inst.extractor.Extract(zipPath, extractPath); err != nil {
+		return inst.createBasicStructure(serverPath)
+	}
 
+	// GitHub ZIP archives extract to a folder named "{repo}-{branch}"
+	// e.g., "cfx-server-data-master"
+	srcResources := filepath.Join(extractPath, "cfx-server-data-master", "resources")
+
+	// Check if the expected path exists, if not try to find it
+	if _, err := os.Stat(srcResources); os.IsNotExist(err) {
+		// Try to find the resources directory
+		entries, readErr := os.ReadDir(extractPath)
+		if readErr != nil {
+			return inst.createBasicStructure(serverPath)
+		}
+
+		// Look for a directory that contains "resources"
+		for _, entry := range entries {
+			if entry.IsDir() {
+				possibleResources := filepath.Join(extractPath, entry.Name(), "resources")
+				if _, statErr := os.Stat(possibleResources); statErr == nil {
+					srcResources = possibleResources
+					break
+				}
+			}
+		}
+	}
+
+	// If we still can't find resources, create basic structure
+	if _, err := os.Stat(srcResources); os.IsNotExist(err) {
+		return inst.createBasicStructure(serverPath)
+	}
+
+	dstResources := filepath.Join(serverPath, "resources")
 	if err := copyDir(srcResources, dstResources); err != nil {
 		return fmt.Errorf("failed to copy resources: %w", err)
 	}
