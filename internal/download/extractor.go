@@ -2,6 +2,7 @@ package download
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"fmt"
 	"io"
 	"os"
@@ -35,6 +36,8 @@ func (e *Extractor) Extract(archivePath, destPath string) error {
 		return e.extractTarXz(archivePath, destPath)
 	} else if strings.HasSuffix(archivePath, ".tar.gz") {
 		return e.extractTarGz(archivePath, destPath)
+	} else if strings.HasSuffix(archivePath, ".zip") {
+		return e.extractZip(archivePath, destPath)
 	}
 
 	return fmt.Errorf("unsupported archive format: %s", archivePath)
@@ -172,6 +175,58 @@ func (e *Extractor) extractTarGz(src, dest string) error {
 	// Similar to extractTarXz but with gzip instead of xz
 	// Not needed for FiveM but useful for future
 	return fmt.Errorf("tar.gz extraction not implemented yet")
+}
+
+// extractZip extracts a zip archive
+func (e *Extractor) extractZip(src, dest string) error {
+	r, err := zip.OpenReader(src)
+	if err != nil {
+		return fmt.Errorf("failed to open zip archive: %w", err)
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		path := filepath.Join(dest, f.Name)
+
+		// Security check: prevent path traversal
+		if !strings.HasPrefix(filepath.Clean(path), filepath.Clean(dest)) {
+			return fmt.Errorf("illegal file path: %s", f.Name)
+		}
+
+		if f.FileInfo().IsDir() {
+			if err := os.MkdirAll(path, f.Mode()); err != nil {
+				return fmt.Errorf("failed to create directory %s: %w", path, err)
+			}
+			continue
+		}
+
+		// Create parent directory
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			return fmt.Errorf("failed to create parent directory: %w", err)
+		}
+
+		// Extract file
+		rc, err := f.Open()
+		if err != nil {
+			return fmt.Errorf("failed to open file in archive: %w", err)
+		}
+
+		outFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		if err != nil {
+			rc.Close()
+			return fmt.Errorf("failed to create output file %s: %w", path, err)
+		}
+
+		_, err = io.Copy(outFile, rc)
+		rc.Close()
+		outFile.Close()
+
+		if err != nil {
+			return fmt.Errorf("failed to extract file %s: %w", path, err)
+		}
+	}
+
+	return nil
 }
 
 // ExtractWithProgress extracts an archive with progress callback
