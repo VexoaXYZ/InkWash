@@ -33,7 +33,7 @@ checksum:
 
 release:
   github:
-    owner: CFX-Software
+    owner: VexoaXYZ
     name: InkWash
   draft: false
   prerelease: auto
