@@ -1,20 +1,36 @@
 package download
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
-	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/VexoaXYZ/inkwash/pkg/types"
 )
 
 const (
+	// ServerDownloadPageURL lists every published server artifact. The old
+	// runtime.fivem.net directory listings now redirect here.
+	ServerDownloadPageURL = "https://docs.fivem.net/docs/server-download/"
+
 	WindowsArtifactURL = "https://runtime.fivem.net/artifacts/fivem/build_server_windows/master/"
 	LinuxArtifactURL   = "https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/"
+)
+
+var (
+	// buildLinkPattern matches an artifact archive link in any form: relative
+	// ("./38435-<sha>/server.7z") or absolute ("https://.../38435-<sha>/server.7z").
+	buildLinkPattern = regexp.MustCompile(`(\d+)-([0-9a-f]{40})/(server\.7z|fx\.tar\.xz)`)
+
+	nextDataPattern = regexp.MustCompile(`(?s)<script id="__NEXT_DATA__"[^>]*>(.*?)</script>`)
+
+	recommendedTextPattern = regexp.MustCompile(`LATEST RECOMMENDED\s*\(\s*(\d+)\s*\)`)
 )
 
 // ArtifactClient handles fetching FiveM server builds
@@ -31,11 +47,9 @@ func NewArtifactClient() *ArtifactClient {
 	}
 }
 
-// FetchBuilds fetches available builds from the FiveM artifacts page
+// FetchBuilds fetches available builds from the FiveM server download page
 func (ac *ArtifactClient) FetchBuilds() ([]types.Build, error) {
-	url := ac.getArtifactURL()
-
-	resp, err := ac.httpClient.Get(url)
+	resp, err := ac.httpClient.Get(ServerDownloadPageURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch artifacts: %w", err)
 	}
@@ -45,146 +59,128 @@ func (ac *ArtifactClient) FetchBuilds() ([]types.Build, error) {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	// Parse HTML directory listing
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse HTML: %w", err)
+		return nil, fmt.Errorf("failed to read artifacts page: %w", err)
 	}
 
-	return ac.parseBuilds(doc)
+	return parseBuilds(string(body), platformKey(), archiveName())
 }
 
-// getArtifactURL returns the appropriate artifact URL for the current platform
-func (ac *ArtifactClient) getArtifactURL() string {
+// platformKey returns the key the download page uses for this OS
+func platformKey() string {
 	if runtime.GOOS == "windows" {
-		return WindowsArtifactURL
+		return "windows"
 	}
-	return LinuxArtifactURL
+	return "linux"
 }
 
-// parseBuilds parses builds from the HTML document
-func (ac *ArtifactClient) parseBuilds(doc *goquery.Document) ([]types.Build, error) {
-	var builds []types.Build
-	pageText := doc.Text()
+// archiveName returns the artifact archive file name for this OS
+func archiveName() string {
+	if runtime.GOOS == "windows" {
+		return "server.7z"
+	}
+	return "fx.tar.xz"
+}
 
-	// Find recommended and optional build numbers from page text
-	recommendedBuild := ac.findRecommendedBuild(pageText)
-	optionalBuild := ac.findOptionalBuild(pageText)
+// artifactEntry is one download entry in the page's embedded data
+type artifactEntry struct {
+	DownloadURL string `json:"downloadURL"`
+}
 
-	// Parse build entries from links
-	doc.Find("a").Each(func(i int, s *goquery.Selection) {
-		href := s.AttrOr("href", "")
+// downloadPageData is the subset of the download page's __NEXT_DATA__ we use
+type downloadPageData struct {
+	Props struct {
+		PageProps struct {
+			Legacy struct {
+				Recommended map[string][]artifactEntry `json:"recommended"`
+				Latest      map[string][]artifactEntry `json:"latest"`
+			} `json:"legacy"`
+		} `json:"pageProps"`
+	} `json:"props"`
+}
 
-		// Look for build archive links: ./BUILD-HASH/server.7z or ./BUILD-HASH/fx.tar.xz
-		if !strings.Contains(href, "/server.7z") && !strings.Contains(href, "/fx.tar.xz") {
-			return
+// parseBuilds extracts builds for one platform from the download page HTML.
+// It reads the page's embedded build data first, and falls back to scanning
+// every artifact link in the page if that data is missing or changes shape.
+// The recommended build comes first, the rest follow newest first.
+func parseBuilds(html, platform, archive string) ([]types.Build, error) {
+	recommended := 0
+	var numbers []int
+	hashes := map[int]string{}
+
+	add := func(link string) int {
+		m := buildLinkPattern.FindStringSubmatch(link)
+		if m == nil || m[3] != archive {
+			return 0
 		}
-
-		// Extract directory part: "./22934-1c490ee35560b652c97a4bfd5a5852cb9f033284/server.7z"
-		// Remove "./" prefix and "/server.7z" or "/fx.tar.xz" suffix
-		href = strings.TrimPrefix(href, "./")
-		href = strings.TrimSuffix(href, "/server.7z")
-		href = strings.TrimSuffix(href, "/fx.tar.xz")
-
-		// Parse: "22934-1c490ee35560b652c97a4bfd5a5852cb9f033284"
-		parts := strings.SplitN(href, "-", 2)
-		if len(parts) < 2 {
-			return
-		}
-
-		number, err := strconv.Atoi(parts[0])
+		number, err := strconv.Atoi(m[1])
 		if err != nil {
-			return
+			return 0
 		}
-
-		hash := parts[1]
-
-		build := types.Build{
-			Number:      number,
-			Hash:        fmt.Sprintf("%d-%s", number, hash),
-			Timestamp:   time.Now(), // We don't have exact timestamp from the page
-			Recommended: number == recommendedBuild,
-			Optional:    number == optionalBuild,
+		if _, seen := hashes[number]; !seen {
+			hashes[number] = fmt.Sprintf("%d-%s", number, m[2])
+			numbers = append(numbers, number)
 		}
+		return number
+	}
 
-		builds = append(builds, build)
+	if m := nextDataPattern.FindStringSubmatch(html); m != nil {
+		var data downloadPageData
+		if err := json.Unmarshal([]byte(m[1]), &data); err == nil {
+			legacy := data.Props.PageProps.Legacy
+			for _, entry := range legacy.Recommended[platform] {
+				if n := add(entry.DownloadURL); n != 0 && recommended == 0 {
+					recommended = n
+				}
+			}
+			for _, entry := range legacy.Latest[platform] {
+				add(entry.DownloadURL)
+			}
+		}
+	}
+
+	if len(numbers) == 0 {
+		for _, m := range buildLinkPattern.FindAllString(html, -1) {
+			add(m)
+		}
+		if m := recommendedTextPattern.FindStringSubmatch(html); m != nil {
+			recommended, _ = strconv.Atoi(m[1])
+		}
+	}
+
+	if len(numbers) == 0 {
+		return nil, fmt.Errorf("no builds found")
+	}
+
+	sort.Slice(numbers, func(i, j int) bool {
+		if (numbers[i] == recommended) != (numbers[j] == recommended) {
+			return numbers[i] == recommended
+		}
+		return numbers[i] > numbers[j]
 	})
 
-	if len(builds) == 0 {
-		return nil, fmt.Errorf("no builds found")
+	builds := make([]types.Build, 0, len(numbers))
+	for _, number := range numbers {
+		builds = append(builds, types.Build{
+			Number:      number,
+			Hash:        hashes[number],
+			Timestamp:   time.Now(), // the page does not publish build timestamps
+			Recommended: number == recommended,
+		})
 	}
 
 	return builds, nil
 }
 
-// findRecommendedBuild extracts the recommended build number from page text
-func (ac *ArtifactClient) findRecommendedBuild(pageText string) int {
-	// Look for pattern like "LATEST RECOMMENDED (17000)"
-	start := strings.Index(pageText, "LATEST RECOMMENDED")
-	if start == -1 {
-		return 0
-	}
-
-	// Find opening parenthesis
-	openParen := strings.Index(pageText[start:], "(")
-	if openParen == -1 {
-		return 0
-	}
-
-	// Find closing parenthesis
-	closeParen := strings.Index(pageText[start+openParen:], ")")
-	if closeParen == -1 {
-		return 0
-	}
-
-	// Extract number
-	numberStr := pageText[start+openParen+1 : start+openParen+closeParen]
-	number, _ := strconv.Atoi(strings.TrimSpace(numberStr))
-
-	return number
-}
-
-// findOptionalBuild extracts the optional build number from page text
-func (ac *ArtifactClient) findOptionalBuild(pageText string) int {
-	// Look for pattern like "LATEST OPTIONAL (7290)"
-	start := strings.Index(pageText, "LATEST OPTIONAL")
-	if start == -1 {
-		return 0
-	}
-
-	// Find opening parenthesis
-	openParen := strings.Index(pageText[start:], "(")
-	if openParen == -1 {
-		return 0
-	}
-
-	// Find closing parenthesis
-	closeParen := strings.Index(pageText[start+openParen:], ")")
-	if closeParen == -1 {
-		return 0
-	}
-
-	// Extract number
-	numberStr := pageText[start+openParen+1 : start+openParen+closeParen]
-	number, _ := strconv.Atoi(strings.TrimSpace(numberStr))
-
-	return number
-}
-
 // GetDownloadURL returns the download URL for a specific build
 func (ac *ArtifactClient) GetDownloadURL(build types.Build) string {
-	var baseURL string
-	var filename string
-
+	baseURL := LinuxArtifactURL
 	if runtime.GOOS == "windows" {
 		baseURL = WindowsArtifactURL
-		filename = "server.7z"
-	} else {
-		baseURL = LinuxArtifactURL
-		filename = "fx.tar.xz"
 	}
 
-	return fmt.Sprintf("%s%s/%s", baseURL, build.Hash, filename)
+	return fmt.Sprintf("%s%s/%s", baseURL, build.Hash, archiveName())
 }
 
 // GetFileSize gets the size of a file from a URL using HEAD request

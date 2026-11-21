@@ -252,18 +252,23 @@ func (inst *Installer) installBinary(buildNumber int, binaryPath string, onProgr
 		return nil, fmt.Errorf("failed to fetch builds: %w", err)
 	}
 
-	// Find the requested build
+	// Find the requested build. Build 0 means the recommended build, or the
+	// newest one if FiveM is not flagging any build as recommended.
 	var targetBuild *types.Build
 	for _, build := range builds {
-		if build.Number == buildNumber {
+		if build.Number == buildNumber || (buildNumber <= 0 && build.Recommended) {
 			targetBuild = &build
 			break
 		}
+	}
+	if targetBuild == nil && buildNumber <= 0 && len(builds) > 0 {
+		targetBuild = &builds[0]
 	}
 
 	if targetBuild == nil {
 		return nil, fmt.Errorf("build %d not found", buildNumber)
 	}
+	buildNumber = targetBuild.Number
 
 	// Check cache after getting build info
 	cachedPath, err := inst.cache.Get(buildNumber)
