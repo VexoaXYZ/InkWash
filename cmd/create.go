@@ -145,7 +145,7 @@ Otherwise, launches interactive wizard.`,
 func init() {
 	rootCmd.AddCommand(createCmd)
 
-	createCmd.Flags().IntP("build", "b", 17000, "FXServer build number")
+	createCmd.Flags().IntP("build", "b", 0, "FXServer build number (default: latest recommended)")
 	createCmd.Flags().StringP("key", "k", "", "License key ID from vault")
 	createCmd.Flags().IntP("port", "p", 0, "Server port (default: 30120)")
 	createCmd.Flags().String("path", "", "Installation path")

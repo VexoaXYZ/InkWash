@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.5] - 2026-11-21
+
+### Fixed
+- Fixed server creation failing with "Failed to fetch builds: no builds found"
+  - FiveM retired the runtime.fivem.net artifact listings; they now redirect to the
+    docs.fivem.net Server Download page, whose links are absolute URLs
+  - Builds are now read from that page's build data, with a fallback scan of every
+    artifact link in the page, so both the new and old formats parse
+  - The recommended build is listed first and selected by default
+- `inkwash create <name>` without `--build` now installs the latest recommended build
+  instead of the hardcoded build 17000, which FiveM no longer publishes
+
+---
+
 ## [2.0.3] - 2026-01-15
 
 ### Fixed
